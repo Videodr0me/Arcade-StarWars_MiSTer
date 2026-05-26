@@ -1,0 +1,28 @@
+# Normalize all text files to LF in the repository
+* text=auto eol=lf
+
+# Binary files — no conversion
+*.rbf binary
+*.mif binary
+*.hex binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+
+# MiSTer sys framework — leave line endings as-is
+sys/** -text
+
+# Third-party RTL modules — leave line endings as-is
+rtl/A6532.vhd              -text
+rtl/pokey.vhd              -text
+rtl/cpu/mc6809e.v          -text
+rtl/cpu/mc6809i.v          -text
+rtl/avg/avg.vhd            -text
+rtl/avg/vector_drawer.vhd  -text
+rtl/pll.v                  -text
+rtl/pll.qip                -text
+rtl/pll.13.qip             -text
+rtl/pll/pll_0002.v         -text
+rtl/pll/pll_0002.qip       -text
+rtl/pll/pll_0002_q13.qip   -text
