@@ -238,6 +238,7 @@ module starwars (
 		.clk(clk_12),
 		.ce(ce_1m5),
 		.reset(reset),
+		.prng_reset(~outlatch[5]),
 		.cpu_addr(main_addr),
 		.cpu_din(main_dout),
 		.cpu_dout(math_dout),
@@ -312,10 +313,10 @@ module starwars (
 			soundlatch_full <= 1'b0;
 			mainlatch <= 8'h00;
 			soundlatch <= 8'h00;
-		end else if (soundrst_we) begin
+		end else if (ce_1m5 && soundrst_we) begin
 			mainlatch_full <= 1'b0;
 			soundlatch_full <= 1'b0;
-		end else begin
+		end else if (ce_1m5) begin
 			if (soundlatch_we) begin
 				soundlatch <= main_dout;
 				soundlatch_full <= 1'b1;

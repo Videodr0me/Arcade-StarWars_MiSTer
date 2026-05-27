@@ -24,6 +24,7 @@ module mathbox (
 	input         clk,    // Master clock (12.096 MHz)
 	input         ce,     // 1.512 MHz Clock Enable (E Clock strobe)
 	input         reset,
+	input         prng_reset, // PRNG reset from outlatch[5] at $4685
 
 	// CPU Interface
 	input  [15:0] cpu_addr,
@@ -179,7 +180,7 @@ module mathbox (
 	reg [22:0] prng;
 	reg [1:0] prng_div;
 	always @(posedge clk) begin
-		if (reset) begin
+		if (reset || prng_reset) begin
 			prng <= 23'h0;
 			prng_div <= 0;
 		end else begin
