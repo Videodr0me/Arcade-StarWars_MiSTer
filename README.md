@@ -33,6 +33,8 @@ The original Star Wars arcade machine (Atari part number 136021) is built from t
 
 Star Wars uses an analog flight yoke. The yoke's X and Y axes are mapped to the primary analog axes of your MiSTer controller.
 
+> **🕹️ Calibration Tip:** The game **auto-calibrates** to your controller's range. When you first start playing, **move the analog stick in a full circle through its extreme positions** — this lets the game learn your stick's full range of motion. You can do this at any time, but the stage select screen is the ideal moment.
+
 | Input | Function |
 |---|---|
 | **Analog Stick** | Move crosshairs (Pitch / Yaw) — proportional, recommended |
