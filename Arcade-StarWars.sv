@@ -299,6 +299,11 @@ localparam CONF_STR = {
 	"O2,Unbuffered Vectors,Off,On;",
 	"D2OP,120Hz (720p only),Off,On;",
 	"-;",
+	"P3,Controls;",
+	"P3OQ,Yoke Input,Auto,Digital;",
+	"P3OST,Digital Sensitivity,Medium,Low,High,Max;",
+	"P3OU,Digital Y Axis,Normal,Reverse;",
+	"-;",
 	"P2,Cabinet Audio Hardware;",
 	"P2-;",
 	"P2O5,TL 084 Filter,On,Off;",
@@ -415,6 +420,11 @@ wire m_auxcoin  = joy[6];          // Aux coin / self-test advance
 wire m_coin     = joy[7];
 wire m_coin2    = joy[8];
 
+wire m_right = joy[0];
+wire m_left  = joy[1];
+wire m_down  = joy[2];
+wire m_up    = joy[3];
+
 wire mod_starwars = 1'b0;
 
 // Video signals
@@ -432,6 +442,94 @@ always @(posedge clk_108) begin
 end
 
 wire reset = (RESET | status[0] |  buttons[1] | rom_download | nvram_download);
+
+wire digital_yoke_forced = status[26];
+wire [3:0] digital_yoke_step =
+	status[29:28] == 2'b01 ? 4'd1 :
+	status[29:28] == 2'b10 ? 4'd4 :
+	status[29:28] == 2'b11 ? 4'd8 :
+	                          4'd2;
+wire [7:0] digital_yoke_move_step = {4'd0, digital_yoke_step};
+wire [7:0] digital_yoke_center_step = digital_yoke_move_step;
+
+function automatic signed [8:0] step_digital_yoke_axis;
+	input signed [8:0] current;
+	input signed [8:0] target;
+	input [7:0] step;
+	reg signed [9:0] diff;
+	reg signed [9:0] step_s;
+	begin
+		diff = $signed({target[8], target}) - $signed({current[8], current});
+		step_s = $signed({2'd0, step});
+
+		if (diff > step_s)
+			step_digital_yoke_axis = current + $signed({1'b0, step});
+		else if (diff < -step_s)
+			step_digital_yoke_axis = current - $signed({1'b0, step});
+		else
+			step_digital_yoke_axis = target;
+	end
+endfunction
+
+wire digital_yoke_y_reverse = status[30];
+wire m_digital_up = digital_yoke_y_reverse ? m_down : m_up;
+wire m_digital_down = digital_yoke_y_reverse ? m_up : m_down;
+wire digital_yoke_x_active = m_left ^ m_right;
+wire digital_yoke_y_active = m_digital_up ^ m_digital_down;
+wire digital_yoke_direction = m_left | m_right | m_up | m_down;
+wire signed [8:0] analog_yoke_x = $signed({joy_l_analog_0[7], joy_l_analog_0[7:0]});
+wire signed [8:0] analog_yoke_y = $signed({joy_l_analog_0[15], joy_l_analog_0[15:8]});
+wire analog_yoke_active =
+	(analog_yoke_x > 9'sd24) || (analog_yoke_x < -9'sd24) ||
+	(analog_yoke_y > 9'sd24) || (analog_yoke_y < -9'sd24);
+wire signed [8:0] digital_yoke_target_x = (m_left ^ m_right) ? (m_right ? 9'sd127 : -9'sd128) : 9'sd0;
+wire signed [8:0] digital_yoke_target_y = digital_yoke_y_active ? (m_digital_down ? 9'sd127 : -9'sd128) : 9'sd0;
+reg signed [8:0] digital_yoke_x;
+reg signed [8:0] digital_yoke_y;
+reg [15:0] digital_yoke_tick_div;
+wire digital_yoke_tick = (digital_yoke_tick_div == 16'd0);
+
+reg digital_auto_latched;
+wire digital_yoke_mode = digital_yoke_forced || digital_auto_latched;
+
+always @(posedge clk_12) begin
+	if (reset) begin
+		digital_auto_latched <= 1'b0;
+		digital_yoke_x <= 9'sd0;
+		digital_yoke_y <= 9'sd0;
+		digital_yoke_tick_div <= 16'd0;
+	end else begin
+		if (digital_yoke_forced)
+			digital_auto_latched <= 1'b0;
+		else if (digital_yoke_direction)
+			digital_auto_latched <= 1'b1;
+		else if (analog_yoke_active)
+			digital_auto_latched <= 1'b0;
+
+		digital_yoke_tick_div <= digital_yoke_tick_div + 16'd1;
+
+		if (!digital_yoke_mode) begin
+			digital_yoke_x <= 9'sd0;
+			digital_yoke_y <= 9'sd0;
+			digital_yoke_tick_div <= 16'd0;
+		end else if (digital_yoke_tick) begin
+			digital_yoke_x <= step_digital_yoke_axis(
+				digital_yoke_x,
+				digital_yoke_target_x,
+				digital_yoke_x_active ? digital_yoke_move_step : digital_yoke_center_step
+			);
+			digital_yoke_y <= step_digital_yoke_axis(
+				digital_yoke_y,
+				digital_yoke_target_y,
+				digital_yoke_y_active ? digital_yoke_move_step : digital_yoke_center_step
+			);
+		end
+	end
+end
+
+wire [7:0] yoke_x = digital_yoke_mode ? digital_yoke_x[7:0] : joy_l_analog_0[7:0];
+wire [7:0] yoke_y = digital_yoke_mode ? digital_yoke_y[7:0] : joy_l_analog_0[15:8];
+
 wire [15:0] audio_l, audio_r;
 assign AUDIO_L = audio_l;
 assign AUDIO_R = audio_r;
@@ -513,8 +611,8 @@ starwars starwars_core
 	.shield_l(m_shield_l),
 	.shield_r(m_shield_r),
 	.test_mode(status[1]),
-	.analog_x(joy_l_analog_0[7:0]),
-	.analog_y(joy_l_analog_0[15:8]),
+	.analog_x(yoke_x),
+	.analog_y(yoke_y),
 	
 	.led(core_led),
 	

@@ -31,13 +31,14 @@ The original Star Wars arcade machine (Atari part number 136021) is built from t
 
 ## Controls
 
-Star Wars uses an analog flight yoke. The yoke's X and Y axes are mapped to the primary analog axes of your MiSTer controller.
+Star Wars uses an analog flight yoke. By default, **Controls > Yoke Input** is set to **Auto**: the analog stick drives the yoke normally, and pressing a digital direction automatically switches to the synthesized digital yoke until the analog stick is moved again. Set **Yoke Input** to **Digital** to force digital yoke control all the time. **Controls > Digital Sensitivity** adjusts how quickly the virtual yoke ramps toward the direction you are holding, and **Controls > Digital Y Axis** can reverse up/down. Releasing the d-pad recenters the virtual yoke at the selected sensitivity speed.
 
-> **🕹️ Calibration Tip:** The game **auto-calibrates** to your controller's range. When you first start playing, **move the analog stick in a full circle through its extreme positions** — this lets the game learn your stick's full range of motion. You can do this at any time, but the stage select screen is the ideal moment.
+> **Calibration Tip:** The game learns yoke limits during its setup flow. If aiming is off after clearing NVRAM, run the normal game calibration with analog input before saving NVRAM.
 
 | Input | Function |
 |---|---|
 | **Analog Stick** | Move crosshairs (Pitch / Yaw) — proportional, recommended |
+| **Digital Stick / D-Pad** | Move crosshairs automatically in **Auto**, or all the time when **Yoke Input** is set to **Digital** |
 | **Fire (Button A)** | Fire lasers — also starts the game after inserting coins |
 | **Shield (Button B)** | Shield button |
 | **Aux Coin (Button Start)** | Auxiliary coin input (also used to navigate Test Mode menus) |
