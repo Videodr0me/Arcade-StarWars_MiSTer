@@ -84,6 +84,7 @@ module cpu09 (
     reg [7:0]  safe_data;
     reg        safe_rw;
     reg        safe_vma;
+    reg        avma_delayed;
 
     always @(posedge clk) begin
         if (rst) begin
@@ -91,15 +92,20 @@ module cpu09 (
             safe_data <= 8'h00;
             safe_rw   <= 1'b1;
             safe_vma  <= 1'b0;
+            avma_delayed <= 1'b0;
         end else if (phase_cnt == 3'd1) begin
             safe_addr <= cpucore_addr;
             safe_data <= cpucore_data_out;
             safe_rw   <= cpucore_rw;
+            
             // The core outputs AVMA (predictive: next cycle valid), not VMA
-            // (current cycle valid). Force VMA=1 during reads to match the
-            // original hardware where chip selects are not AVMA-gated.
-            // Writes still respect AVMA to prevent spurious writes.
+            // (current cycle valid). The wrapper forces VMA=1 during reads
+            // to match the original hardware where address decoding is not AVMA-gated.
             safe_vma  <= cpucore_vma | cpucore_rw;
+            
+            // EXPERIMENTAL: True current-cycle VMA (breaks ESB due to Cavnex bug)
+            // safe_vma  <= avma_delayed;
+            // avma_delayed <= cpucore_vma;
         end
     end
 

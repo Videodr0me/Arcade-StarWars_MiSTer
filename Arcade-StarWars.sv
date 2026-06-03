@@ -184,14 +184,13 @@ assign VGA_SL = 0;
 assign USER_OUT  = '1;
 wire [2:0] core_led;
 assign LED_USER  = core_led[2] | ioctl_download;
-assign LED_DISK  = {1'b1, core_led[1]};
-assign LED_POWER = {1'b1, core_led[0]};
+assign LED_DISK  = 2'b00;
+assign LED_POWER = 2'b00;
 assign BUTTONS   = 0;
 assign AUDIO_MIX = 0;
 assign HDMI_FREEZE = 0;
 
-assign CLK_VIDEO = clk_108; // Direct PLL output (109 MHz)
-assign CE_PIXEL = ce_pix;   // Video clock enable: gates CLK_VIDEO to derive 60Hz/120Hz
+assign CLK_VIDEO = clk_108; // Direct PLL output (107.14 MHz)
 assign VGA_HS = hs;
 assign VGA_VS = vs;
 assign VGA_DE = ~(hblank | vblank);
@@ -201,41 +200,40 @@ assign VGA_B = 0;
 
 wire [1:0] ar = status[15:14];
 
-// Auto-detect optimal display size from HDMI output resolution.
-// Pick the largest clean scale factor that fits the output.
-// FB is 980×700. Integer scales: ×1=980×700, ×1.5=1470×1050, ×2=1960×1400, ×3=2940×2100
+// Auto-detect optimal aspect ratio from HDMI output resolution.
+// Match the internal framebuffer size to ensure exactly 4:3 or 1.4:1 scaling.
 reg [12:0] auto_arx, auto_ary;
 always @(*) begin
-	if (HDMI_HEIGHT >= 2100) begin
-		// 4K (3840×2160): ×3 integer scale (4K not supported yet ;-)
-		auto_arx = 13'h1B7C;  // 0x1000 | 2940
-		auto_ary = 13'h1834;  // 0x1000 | 2100
-	end else if (HDMI_HEIGHT >= 1400) begin
-		// 1440p (2560×1440): ×2 integer scale
-		auto_arx = 13'h17A8;  // 0x1000 | 1960
-		auto_ary = 13'h1578;  // 0x1000 | 1400
-	end else if (HDMI_HEIGHT >= 1050) begin
-		// 1080p (1920×1080): ×1.5 scale (3:2)
-		auto_arx = 13'h15BE;  // 0x1000 | 1470
-		auto_ary = 13'h141A;  // 0x1000 | 1050
+	if (HDMI_HEIGHT >= 1050) begin
+		// 1080p Mode (1472x1050 Framebuffer)
+		auto_arx = 13'h1000 | 13'd1472;
+		auto_ary = 13'h1000 | 13'd1050;
+	end else if (HDMI_HEIGHT >= 700) begin
+		// 720p Mode (980x700 Framebuffer)
+		auto_arx = 13'h1000 | 13'd980;
+		auto_ary = 13'h1000 | 13'd700;
+	end else if (HDMI_HEIGHT >= 400) begin
+		// 480p Mode (640x480 Framebuffer) - Integer Scale (1:1)
+		auto_arx = 13'h1000 | 13'd640;
+		auto_ary = 13'h1000 | 13'd480;
 	end else begin
-		// 720p (1280×720) or smaller: 1:1 pixel perfect
-		auto_arx = 13'h13D4;  // 0x1000 | 980
-		auto_ary = 13'h12BC;  // 0x1000 | 700
+		// 240p (15kHz) Mode (640x240 Framebuffer) - Integer Scale (1:1)
+		auto_arx = 13'h1000 | 13'd640;
+		auto_ary = 13'h1000 | 13'd240;
 	end
 end
 
 assign VIDEO_ARX = (ar == 0) ? auto_arx :  // Optimized (auto-detect)
                    (ar == 1) ? 13'd0 :     // Stretched
-                               13'h13D4;   // Pixel Perfect (1:1)
+                               auto_arx;   // Pixel Perfect (1:1)
 
 assign VIDEO_ARY = (ar == 0) ? auto_ary :  // Optimized (auto-detect)
                    (ar == 1) ? 13'd0 :     // Stretched
-                               13'h12BC;   // Pixel Perfect (1:1)
+                               auto_ary;   // Pixel Perfect (1:1)
 
 // 120Hz MODE — SAFE ACTIVATION
 // The HPS restores saved status bits (including status[25]=120Hz ON)
-// during boot, BEFORE HDMI_HEIGHT is valid during initialization → HDMI sync loss.
+// during boot, BEFORE HDMI_HEIGHT is valid during initialization -> HDMI sync loss.
 
 // --- Stage 1: Boot holdoff (~1.3 seconds after FPGA config) ---
 // Core ALWAYS starts outputting 60Hz timing regardless of saved settings.
@@ -249,8 +247,8 @@ always @(posedge clk_50) begin
 end
 
 // --- Stage 2: HDMI_HEIGHT validation
-// Require height to be in a valid range (256-720) and stable for ~335ms.
-wire is_720p_valid = (HDMI_HEIGHT >= 12'd256) & (HDMI_HEIGHT <= 12'd720);
+// Require height to be in a valid range (600-720) and stable for ~335ms.
+wire is_720p_valid = (HDMI_HEIGHT >= 12'd600) & (HDMI_HEIGHT <= 12'd720);
 reg [24:0] stable_720p_cnt = 0;
 reg is_720p_stable = 0;
 always @(posedge clk_50) begin
@@ -292,40 +290,64 @@ always @(posedge clk_50) begin
 end
 
 `include "build_id.v" 
+// Status Bit Map:
+//             Upper                             Lower              
+// 0         1         2         3          4         5         6   
+// 01234567890123456789012345678901 23456789012345678901234567890123
+// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXX                           
 localparam CONF_STR = {
 	"Star Wars;;",
 	"-;",
-	"OEF,Aspect ratio,Optimized,Stretched,Pixel Perfect;",
-	"O2,Unbuffered Vectors,Off,On;",
-	"D2OP,120Hz (720p only),Off,On;",
-	"-;",
-	"P3,Controls;",
-	"P3OQ,Yoke Input,Auto,Digital;",
-	"P3OST,Digital Sensitivity,Medium,Low,High,Max;",
-	"P3OU,Digital Y Axis,Normal,Reverse;",
-	"-;",
+	"P3,Video Options;",
+	"P3-;",
+	"P3OEF,Aspect ratio,Optimized,Stretched,Pixel Perfect;",
+	"D3P3OP,120Hz (720p only),Off,On;",
+	"P3O2,Unbuffered Vectors,Off,On;",
+	"P3-;",
+	"P3OSTU,CRT Dot Bloom,Auto,Pixel,Double,Elipse;",
+	"P3OQ,CRT Overdrive (Hit Flash),On,Off;",
+	"P3OV,Tone Mapping,Modern,Legacy;",
+	 "-;",
 	"P2,Cabinet Audio Hardware;",
 	"P2-;",
 	"P2O5,TL 084 Filter,On,Off;",
 	"P2O6,Reticon Del/Rev,On,Off;",
+	"-;",
+	"P4,Input Controls;",
+	"P4o01,Input,Analog,Digital,Auto;",
+	"D4P4o23,Digital Sensitivity,Medium,Low,High,Max;",
+	"P4-;",
+	"P4o4,Y-Axis,Normal,Inverted;",
 	"-;",
 	"P1,DIP Settings;",
 	"P1-,* Change setup via Testmode;",
 	"P1-,* in Demo Loop - not DIPs!;",
 	"P1O1,Test Mode,Off,On;",
 	"P1-;",
-	"P1O78,Starting Shields,6,7,8,9;",
-	"P1O9A,Difficulty,Moderate,Hard,Hardest,Easy;",
-	"P1OBC,Bonus Shields,0,1,2,3;",
-	"P1OD,Demo Sounds,On,Off;",
-	"P1OHI,Coinage,1 Play/Coin,2 Coins/Play,Free Play,2 Plays/Coin;",
-	"P1OJK,Right Coin,x1,x4,x5,x6;",
-	"P1OL,Left Coin,x1,x2;",
-	"P1OMNO,Bonus Coin Adder,None,2 gives 1,4 gives 1,4 gives 2,5 gives 1,3 gives 1;",
+	// Star Wars DIPs (Totally invisible when ESB loaded)
+	"h1P1O78,Starting Shields,8,9,6,7;",
+	"h1P1O9A,Difficulty,Moderate,Hard,Hardest,Easy;",
+	"h1P1OBC,Bonus Shields,1,2,3,0;",
+	"h1P1OD,Demo Sounds,On,Off;",
+	"h1P1OHI,Coinage,1 Play/Coin,2 Coins/Play,Free Play,2 Plays/Coin;",
+	"h1P1OJK,Right Coin,x1,x4,x5,x6;",
+	"h1P1OL,Left Coin,x1,x2;",
+	"h1P1OMNO,Bonus Coin Adder,None,2 gives 1,4 gives 1,4 gives 2,5 gives 1,3 gives 1;",
+	"h1P1OG,Freeze,Off,On;",
+	// Empire Strikes Back DIPs (Totally invisible when SW loaded)
+	"h2P1O78,Starting Shields,4,5,2,3;",
+	"h2P1O9A,Difficulty,Hard,Hardest,Easy,Moderate;",
+	"h2P1OBC,JEDI Letter Mode,Increment,Level,Inc. Only,Level Only;",
+	"h2P1OD,Demo Sounds,On,Off;",
+	"h2P1OHI,Coinage,1 Play/Coin,2 Coins/Play,Free Play,2 Plays/Coin;",
+	"h2P1OJK,Right Coin,x1,x4,x5,x6;",
+	"h2P1OL,Left Coin,x1,x2;",
+	"h2P1OMNO,Bonus Coin Adder,None,2 gives 1,4 gives 1,4 gives 2,5 gives 1,3 gives 1;",
+	"h2P1OG,Freeze,Off,On;",
 	"P1-;",
 	"P1-,* DIPs need Clear & Reset !;",
 	"P1T3,Clear NVRAM;",
-	"P1OG,Freeze,Off,On;",
 	"-;",
 	"OR,Autosave NVRAM,Off,On;",
 	"T4,Save NVRAM;",
@@ -333,7 +355,7 @@ localparam CONF_STR = {
 	"R0,Reset;",
 	"J1,Fire L,Shield L,Aux Coin,Coin L,Coin R,Fire R,Shield R;",
 	"jn,A,B,Start,R,L,Y,Z;",
-	"V,v1.00.",`BUILD_DATE
+	"V,v1.01.",`BUILD_DATE
 };
 
 ////////////////////   CLOCKS   ///////////////////
@@ -355,7 +377,7 @@ pll pll
 
 ///////////////////////////////////////////////////
 
-wire [31:0] status;
+wire [63:0] status;
 wire  [1:0] buttons;
 wire        forced_scandoubler;
 wire        direct_video;
@@ -386,7 +408,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({not_720p, mod_starwars, direct_video}),
+	.status_menumask({is_analog_input, not_720p, mod_esb, mod_starwars, direct_video}),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
 	.direct_video(direct_video),
@@ -425,31 +447,35 @@ wire m_left  = joy[1];
 wire m_down  = joy[2];
 wire m_up    = joy[3];
 
-wire mod_starwars = 1'b0;
+// ESB mod selector.  The MRA's <rom index="1"><part>1</part></rom>
+// drives ioctl_index=1 with data=0x01 when ESB is loaded; mod=0 (the
+// default at boot) selects Star Wars.  Sticky after rom_download
+// completes so the value survives once the MRA is in.
+reg [7:0] mod_byte = 8'h00;
+always @(posedge clk_12) begin
+	if (ioctl_wr && (ioctl_index == 8'd1)) mod_byte <= ioctl_dout;
+end
+wire mod_esb = (mod_byte == 8'h01);
+wire mod_starwars = !mod_esb;
 
 // Video signals
 wire hblank, vblank;
 wire hs, vs;
 wire [3:0] r,g,b;
 
-// CE_PIXEL generation on CLK_VIDEO domain (109 MHz)
-reg ce_pix;
-always @(posedge clk_108) begin
-	if (osd_120hz_mode)
-		ce_pix <= 1'b1;       // Full 109 MHz → 120Hz
-	else
-		ce_pix <= ~ce_pix;    // ~54.5 MHz → 60Hz
-end
-
 wire reset = (RESET | status[0] |  buttons[1] | rom_download | nvram_download);
 
-wire digital_yoke_forced = status[26];
+// Digital Joystick and Y-Axis Inversion Handling
+wire [1:0] input_mode = status[33:32];
+wire is_analog_input = (input_mode == 2'd0);
+wire digital_yoke_forced = (input_mode == 2'd1);
 wire [3:0] digital_yoke_step =
-	status[29:28] == 2'b01 ? 4'd1 :
-	status[29:28] == 2'b10 ? 4'd4 :
-	status[29:28] == 2'b11 ? 4'd8 :
+	status[35:34] == 2'b01 ? 4'd1 :
+	status[35:34] == 2'b10 ? 4'd4 :
+	status[35:34] == 2'b11 ? 4'd8 :
 	                          4'd2;
 wire [7:0] digital_yoke_move_step = {4'd0, digital_yoke_step};
+// Separated for future enhancements (e.g., independent auto-centering speed)
 wire [7:0] digital_yoke_center_step = digital_yoke_move_step;
 
 function automatic signed [8:0] step_digital_yoke_axis;
@@ -471,9 +497,9 @@ function automatic signed [8:0] step_digital_yoke_axis;
 	end
 endfunction
 
-wire digital_yoke_y_reverse = status[30];
-wire m_digital_up = digital_yoke_y_reverse ? m_down : m_up;
-wire m_digital_down = digital_yoke_y_reverse ? m_up : m_down;
+wire input_y_reverse = status[36];
+wire m_digital_up = input_y_reverse ? m_down : m_up;
+wire m_digital_down = input_y_reverse ? m_up : m_down;
 wire digital_yoke_x_active = m_left ^ m_right;
 wire digital_yoke_y_active = m_digital_up ^ m_digital_down;
 wire digital_yoke_direction = m_left | m_right | m_up | m_down;
@@ -490,7 +516,7 @@ reg [15:0] digital_yoke_tick_div;
 wire digital_yoke_tick = (digital_yoke_tick_div == 16'd0);
 
 reg digital_auto_latched;
-wire digital_yoke_mode = digital_yoke_forced || digital_auto_latched;
+wire digital_yoke_mode = (digital_yoke_forced || digital_auto_latched) && !is_analog_input;
 
 always @(posedge clk_12) begin
 	if (reset) begin
@@ -499,7 +525,7 @@ always @(posedge clk_12) begin
 		digital_yoke_y <= 9'sd0;
 		digital_yoke_tick_div <= 16'd0;
 	end else begin
-		if (digital_yoke_forced)
+		if (digital_yoke_forced || is_analog_input)
 			digital_auto_latched <= 1'b0;
 		else if (digital_yoke_direction)
 			digital_auto_latched <= 1'b1;
@@ -527,23 +553,27 @@ always @(posedge clk_12) begin
 	end
 end
 
+wire [7:0] raw_analog_y = joy_l_analog_0[15:8];
+wire [7:0] final_analog_y = input_y_reverse ? ~raw_analog_y : raw_analog_y;
 wire [7:0] yoke_x = digital_yoke_mode ? digital_yoke_x[7:0] : joy_l_analog_0[7:0];
-wire [7:0] yoke_y = digital_yoke_mode ? digital_yoke_y[7:0] : joy_l_analog_0[15:8];
+wire [7:0] yoke_y = digital_yoke_mode ? digital_yoke_y[7:0] : final_analog_y;
 
+// AUDIO OUT
 wire [15:0] audio_l, audio_r;
 assign AUDIO_L = audio_l;
 assign AUDIO_R = audio_r;
 assign AUDIO_S = 1;
 wire vgade;
 
+// DIP SWITCHES LOGIC (SW0)
 wire [7:0] m_dsw0 = {
 	~status[16],       // [7] Freeze (OG, 0=Off, 1=On -> ~0 = 1 = Off)
-	status[13],        // [6] Demo Sounds (OD, 0=On, 1=Off)
-	status[12:11],     // [5:4] Bonus Shields (OBC)
-	status[10:9] + 2'd1,   // [3:2] Difficulty (O9A, rotated +1: 0=Mod,1=Hard,2=Hrd+,3=Easy)
-	status[8:7]        // [1:0] Starting Shields (O78)
+	mod_esb ? ~status[13] : status[13],        // [6] Demo Sounds (OD, 0=On, 1=Off)
+	mod_esb ? ((status[12:11] == 2'b00) ? 2'b11 : (status[12:11] == 2'b11) ? 2'b00 : status[12:11]) : (status[12:11] + 2'd1), // [5:4] Bonus Shields / JEDI Letters (OBC)
+	mod_esb ? status[10:9] : (status[10:9] + 2'd1),                                                                           // [3:2] Difficulty (O9A)
+	mod_esb ? ~status[8:7] : (status[8:7] + 2'd2)                                                                             // [1:0] Starting Shields (O78)
 };
-
+// DIP SWITCHES LOGIC (SW1)	
 wire [7:0] m_dsw1 = {
 	status[24:22],     // [7:5] Bonus Coin Adder (OMNO)
 	status[21],        // [4] Left Coin (OL)
@@ -562,6 +592,14 @@ starwars starwars_core
 	.osd_audio_filter(~status[5]),   // Inverted: OSD 0=On, 1=Off
 	.osd_audio_delay(~status[6]),    // Inverted: OSD 0=On, 1=Off
 	.osd_120hz_mode(osd_120hz_mode),
+	.osd_star_pattern(status[30:28]),
+	.osd_legacy_tone(status[31]),
+	.osd_disable_flash(status[26]),
+	.HDMI_HEIGHT(HDMI_HEIGHT),
+
+	.mod_esb(mod_esb),
+	
+	.CE_PIXEL(CE_PIXEL),
 
 	// DDRAM Framebuffer Interface
 	.DDRAM_CLK(DDRAM_CLK),

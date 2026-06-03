@@ -3,6 +3,7 @@ set_global_assignment -name VHDL_FILE rtl/avg/avg.vhd
 set_global_assignment -name VHDL_FILE rtl/pokey.vhd
 set_global_assignment -name VHDL_FILE rtl/TMS5220.vhd
 set_global_assignment -name VHDL_FILE rtl/A6532.vhd
+set_global_assignment -name VHDL_FILE rtl/slapstic101.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/vector_fb_ddram.sv
 set_global_assignment -name VERILOG_FILE rtl/cpu/mc6809e.v
 set_global_assignment -name VERILOG_FILE rtl/cpu/mc6809i.v

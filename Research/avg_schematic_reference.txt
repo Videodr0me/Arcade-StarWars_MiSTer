@@ -1,0 +1,745 @@
+﻿; ============================================================================
+; STAR WARS AVG Analog Vector-Generator PCB - Schematic Text Reference
+; ============================================================================
+; Compiled by Videodr0me 2026
+;
+; Source: SP-225 Schematic Package Supplement, 2nd Printing
+; Sheets: 12A (p.22) through 14B (p.27)
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: Op Code and Intensity Latches    *** VERIFIED 2026-05-31 ***
+; Sheet 12B, p.23 Fig.0
+; IMAGE: Schematics\_page_23_Figure_0.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  4H:
+    DVG4..DVG7   -- data bus bits 4-7
+    /LATCH1      -- clock (inverted, rising edge = latch)
+    PR110        -- async clear (active low, system reset only)
+  3C:
+    DVG4..DVG7   -- data bus bits 4-7
+    /LATCH3      -- clock (inverted, rising edge = latch)
+    /LATCH1      -- async clear (active low, clears Z0-Z2 + DVX12 at every LATCH1)
+
+SIGNALS OUT:
+  4H:
+    OP2, /OP2    -- opcode bit 2 (Q and /Q)
+    OP1, /OP1    -- opcode bit 1
+    OP0, /OP0    -- opcode bit 0
+    DVY12, /DVY12 -- DVY sign/overflow bit (Q and /Q)
+  3C:
+    Z2, /Z2      -- intensity modifier bit 2
+    Z1, /Z1      -- intensity modifier bit 1
+    Z0, /Z0      -- intensity modifier bit 0
+    DVX12, /DVX12 -- DVX sign/overflow bit
+
+CHIPS:
+  4H    LS175    -- Opcode + DVY12 latch (clocked by /LATCH1, cleared by PR110)
+  3C    LS175    -- Intensity + DVX12 latch (clocked by /LATCH3, cleared by /LATCH1)
+
+LOGIC:
+  4H(LS175):     CK = /LATCH1, C = PR110 (async clear on system reset only)
+                 D4=DVG7  -> Q=OP2,   /Q=/OP2       (pin 4->2,3)
+                 D3=DVG6  -> Q=OP1,   /Q=/OP1       (pin 12->10,11)
+                 D2=DVG5  -> Q=OP0,   /Q=/OP0       (pin 13->7,6)
+                 D1=DVG4  -> Q=DVY12, /Q=/DVY12     (pin 3->15,14)
+  3C(LS175):     CK = /LATCH3, C = /LATCH1 (async clear at every instruction start)
+                 D4=DVG7  -> Q=Z2,    /Q=/Z2        (pin 12->10,11)
+                 D3=DVG6  -> Q=Z1,    /Q=/Z1        (pin 5->7,6)
+                 D2=DVG5  -> Q=Z0,    /Q=/Z0        (pin 13->15,14)
+                 D1=DVG4  -> Q=DVX12, /Q=/DVX12     (pin 4->2,3)
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: Vector Data Shifters              *** VERIFIED 2026-05-30 ***
+; Sheet 12B, p.23 Fig.2
+; IMAGE: Schematics\_page_23_Figure_2.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  DVG0..DVG7     -- data bus (parallel load data)
+  /ENORM         -- enable normalization shift, ACTIVE LOW (from Normalization Flag)
+  /LATCH0        -- load DVY low byte (bits 0-3 via 5F, bits 4-7 via 5H)
+  /LATCH1        -- load DVY high byte (bits 8-11 via 6H, +DVY12 via LS175)
+                 -- AND async clear DVY0-7 + DVX0-11 (pin 1 /CLR of 5F,5H,5A,5B,5C)
+                 -- AND async clear Z0-Z2 + DVX12 (pin 1 /CLR of 3C LS175)
+  /LATCH2        -- load DVX low byte (bits 0-3 via 5A, bits 4-7 via 5B)
+  /LATCH3        -- load DVX high byte (bits 8-11 via 5C, +DVX12 via LS175)
+  PR110          -- system reset (async clear for DVY LS194s only)
+  12 MHZ         -- master clock (L CKC clock tree)
+
+SIGNALS OUT:
+  DVY0..DVY11    -- DVY data bits (to integrator DACs, address controller)
+  DVX0..DVX11    -- DVX data bits (to integrator DACs)
+  DVY3           -- serial cascade: 5F.QD -> 5H.SR (shift right input)
+  DVY7           -- serial cascade: 5H.QD -> 6H.SR
+  DVX3           -- serial cascade: 5A.QD -> 5B.SR
+  DVX7           -- serial cascade: 5B.QD -> 5C.SR
+
+CHIPS:
+  ; DVY chain (top row):
+  5F    LS194    -- DVY bits 0-3 (low nibble),   /CLR(1)=/LATCH1
+  5H    LS194    -- DVY bits 4-7 (mid nibble),   /CLR(1)=/LATCH1
+  6H    LS194    -- DVY bits 8-11 (high nibble),  /CLR(1)=PR110
+  ; DVX chain (bottom row):
+  5A    LS194    -- DVX bits 0-3 (low nibble),   /CLR(1)=/LATCH1
+  5B    LS194    -- DVX bits 4-7 (mid nibble),   /CLR(1)=/LATCH1
+  5C    LS194    -- DVX bits 8-11 (high nibble),  /CLR(1)=/LATCH1
+  ; Mode control:
+  4E    S00      -- Quad 2-input NAND (mode S1 control, gates /ENORM with /LATCHx)
+  4D    LS14     -- Hex Schmitt-trigger inverter (mode S0 control, inverts /LATCHx)
+
+LOGIC:
+--------------------------------------------
+  4E (S00, quad NAND) - controls S1 pin of each LS194:
+    4Ea: pin 1=/LATCH0,  pin 2=/ENORM  -> pin 3=NAND  -> 5F.S1(10), 5H.S1(10)
+    4Eb: pin 4=/LATCH1,  pin 5=/ENORM  -> pin 6=NAND  -> 6H.S1(10)
+    4Ec: pin 9=/LATCH2,  pin 10=/ENORM -> pin 8=NAND  -> 5A.S1(10), 5B.S1(10)
+    4Ed: pin 13=/LATCH3, pin 12=/ENORM -> pin 11=NAND -> 5C.S1(10)
+
+  4D (LS14, hex inverter) - controls S0 pin of each LS194:
+    4Da: pin 1=/LATCH0  -> pin 2=LATCH0  -> 5F.S0(9), 5H.S0(9)
+    4Db: pin 3=/LATCH1  -> pin 4=LATCH1  -> 6H.S0(9)
+    4Dc: pin 5=/LATCH2  -> pin 6=LATCH2  -> 5A.S0(9), 5B.S0(9)
+    4Dd: pin 13=/LATCH3 -> pin 12=LATCH3 -> 5C.S0(9)
+
+  ; -- DVY CHAIN (control pins only, data pins are straightforward) ----
+
+  5F (LS194, DVY bits 0-3):
+    /CLR(1) = /LATCH1     (async clear when /LATCH1 goes LOW)
+    SR(2)   = PR110
+    SL(7)   = GND
+    S0(9)   = 4Da pin 2   (inverted /LATCH0)
+    S1(10)  = 4Ea pin 3   (NAND of /LATCH0, /ENORM)
+    CK(11)  = 12 MHz
+
+  5H (LS194, DVY bits 4-7):
+    connected identically to 5F for control pins:
+    /CLR(1) = /LATCH1
+    SR(2)   = PR110
+    SL(7)   = DVY3        (from 5F.QD pin 15, cascade for shift)
+    S0(9)   = 4Da pin 2
+    S1(10)  = 4Ea pin 3
+    CK(11)  = 12 MHz
+
+  6H (LS194, DVY bits 8-11):
+    /CLR(1) = PR110       (system reset only - NOT cleared by /LATCH1)
+    SR(2)   = PR110
+    SL(7)   = DVY7        (from 5H.QD pin 15, cascade for shift)
+    S0(9)   = 4Db pin 4   (inverted /LATCH1)
+    S1(10)  = 4Eb pin 6   (NAND of /LATCH1, /ENORM)
+    CK(11)  = 12 MHz
+
+  ; -- DVX CHAIN (control pins only) -----------------------------------
+
+  5A (LS194, DVX bits 0-3):
+    /CLR(1) = /LATCH1     (async clear when /LATCH1 goes LOW)
+    SR(2)   = PR110
+    SL(7)   = GND
+    S0(9)   = 4Dc pin 6   (inverted /LATCH2)
+    S1(10)  = 4Ec pin 8   (NAND of /LATCH2, /ENORM)
+    CK(11)  = 12 MHz
+
+  5B (LS194, DVX bits 4-7):
+    /CLR(1) = /LATCH1     (async clear when /LATCH1 goes LOW)
+    SR(2)   = PR110
+    SL(7)   = DVX3        (from 5A.QD pin 15, cascade for shift)
+    S0(9)   = 4Dc pin 6   (same as 5A)
+    S1(10)  = 4Ec pin 8   (same as 5A)
+    CK(11)  = 12 MHz
+
+  5C (LS194, DVX bits 8-11):
+    /CLR(1) = /LATCH1     (async clear when /LATCH1 goes LOW)
+    SR(2)   = PR110
+    SL(7)   = DVX7        (from 5B.QD pin 15, cascade for shift)
+    S0(9)   = 4Dd pin 12  (inverted /LATCH3)
+    S1(10)  = 4Ed pin 11  (NAND of /LATCH3, /ENORM)
+    CK(11)  = 12 MHz
+
+
+; ============================================================================
+; SHEET 13A (p.24) - PROM State Machine and Flags
+; ============================================================================
+
+; ------------------------------------------------------------------------------
+; BLOCK: Normalization Flag                *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.0
+; IMAGE: Schematics\_page_24_Figure_0.jpeg
+; ------------------------------------------------------------------------------
+;
+; Controls when the LS194 shift registers perform normalization shifts.
+; Normalization runs at 12 MHz while the PROM state is frozen.
+
+SIGNALS IN:
+  DVY12          -- from 4H(LS175) Q output (sign bit of DVY)
+  DVY11          -- from 6H(LS194) QD output (MSB of DVY data)
+  DVX12          -- from 3C(LS175) Q output (sign bit of DVX)
+  DVX11          -- from 5C(LS194) QD output (MSB of DVX data)
+  VCTR           -- vector drawing active flag (from VCTR Flag block)
+  SCALE          -- bin_scale shifting active flag
+  CNTR           -- center active flag (from Center Flag block)
+  /OP0           -- inverted opcode bit 0 (from 4H /Q)
+  /STROBE0       -- normalization trigger (from State Machine block, 3D pin 5)
+  PR109          -- system timing preset
+  /SA            -- inverted signature analysis (normally HIGH, pulled up by R10)
+
+SIGNALS OUT:
+  NORM           -- normalization in progress (freezes PROM state)
+  /ENORM         -- enable normalization clocking, ACTIVE LOW (to S00 4E -> LS194 mode)
+
+CHIPS:
+  4F    S86      -- Dual 4-bit XOR (used as 2 single-bit XOR gates)
+  3F    S260     -- Dual 5-input NOR (one gate used)
+  5K    S74      -- D flip-flop (NORM flag)
+  6J    S10      -- Triple 3-input NAND (gate 3: pins 9,10,11 -> 8)
+
+LOGIC:
+  4F(S86).gate1: DVY_DIFF = DVY12 XOR DVY11        -- pins 2,1->3
+  4F(S86).gate2: DVX_DIFF = DVX12 XOR DVX11        -- pins 9,10->8
+
+  3F(S260):      NORM_CLR = NOR5(DVY_DIFF,          -- pin 1 (from 4F.3)
+                                  DVX_DIFF,          -- pin 2 (from 4F.8)
+                                  VCTR,              -- pin 3
+                                  SCALE,             -- pin 12
+                                  CNTR)              -- pin 13
+                 ; Output pin 5 -> 5K /CLR pin (pin 13) AND 6J pin 10
+                 ; NORM_CLR=1 only when ALL five inputs are 0
+
+  5K(S74):       D  = /OP0                          -- pin 12
+                 CK = /STROBE0                       -- pin 11 (rising edge = trailing
+                 ;                                      edge of STROBE0 pulse)
+                 P  = PR109                          -- pin 10 (active low preset)
+                 C  = NORM_CLR                       -- pin 13 (/CLR, active low:
+                 ;                                      LOW clears Q->0)
+                 Q  = NORM                           -- pin 9
+                 ; On /STROBE0 rising edge: NORM = /OP0 (=1 when OP0=0)
+                 ; Async clear: when NORM_CLR goes LOW -> NORM = 0
+                 ; This happens when any of: DVY_DIFF, DVX_DIFF, VCTR,
+                 ; SCALE, or CNTR goes HIGH.
+
+  6J(S10):       /ENORM = NAND(NORM,                 -- pin 9  (from 5K Q)
+                                NORM_CLR,             -- pin 10 (from S260 pin 5)
+                                /SA)                  -- pin 11 (normally HIGH)
+                 ; Output pin 8 = /ENORM (active LOW when shifting)
+                 ;
+
+
+NOTES:
+  - Normalization starts at STROBE0 if /OP0=1 (i.e., OP0=0, not a JSR).
+  - Shifts continue at 12 MHz until DVY12!=DVY11 OR DVX12!=DVX11.
+  - The XOR mismatch triggers NORM_CLR->0 which:
+    (a) Clears NORM via 5K(S74) /CLR (async)
+    (b) Disables shifting via 6J(S10) NAND -> /ENORM->1
+
+; ------------------------------------------------------------------------------
+; BLOCK: Halt Flag                        *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.1
+; IMAGE: Schematics\_page_24_Figure_1.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  OP0            -- opcode bit 0
+  /STROBE3       -- HALT trigger (state $F, from State Machine block, 3D pin 9)
+  /VGRST         -- vector generator reset
+  /VGGO           -- vector generator go (active low, clears halt)
+
+SIGNALS OUT:
+  HALT           -- AVG is halted (pin 9) -> State Machine block (3B pin 6, D2)
+  /HALT          -- inverted halt (pin 8)
+
+CHIPS:
+  1H    LS74     -- D flip-flop
+
+LOGIC:
+  1H(LS74):      D  = OP0                           -- pin 12
+                 CK = /STROBE3                       -- pin 11
+                 P  = /VGRST                         -- pin 10 (active low preset)
+                 C  = /VGGO                          -- pin 13 (active low clear)
+                 Q  = HALT                           -- pin 9
+                 /Q = /HALT                          -- pin 8
+
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: Signature Analysis                *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.2
+; IMAGE: Schematics\_page_24_Figure_2.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  /SA            -- signature analysis input (normally HIGH via R10 pull-up)
+                 ;   external test connector, active low
+
+SIGNALS OUT:
+  SA             -- signature analysis active (pin 8) -> State Machine block
+                 ;   (4C pin 1 S, 4A pin 1 S, 4C pin 15 /G, 4A pin 15 /G)
+  /SA            -- inverted SA (directly from pull-up junction)
+                 ;   -> Normalization Flag block (6J pin 11)
+
+CHIPS:
+  6K    LS04     -- Hex inverter (one gate used)
+  R10   10K      -- Pull-up resistor to +5V
+
+LOGIC:
+  R10:           +5V -> /SA junction (pull-up, normally HIGH)
+  6K(LS04):      SA = NOT(/SA)                       -- pins 9->8
+                 ; /SA on pin 9 (input), SA on pin 8 (output)
+
+
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: State Machine (PROM + Control Logic) *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.3
+; IMAGE: Schematics\_page_24_Figure_3.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  GO             -- drawing active (VCTR OR CNTR, from Go Flag 2E pin 8)
+  HALT           -- halted (from Halt Flag 1H pin 9)
+  OP2, OP1, OP0  -- opcode bits (from opcode latch)
+  SA             -- state address freeze (from Signature Analysis / Normalization)
+  /VGRST         -- vector generator reset (active low)
+  AM0..AM7       -- address mux feedback (from 4C/4A LS157 outputs)
+
+SIGNALS OUT:
+  HALT*          -- latched HALT (3B pin 7, Q2). Internal feedback to 1E pin 12.
+  F0             -- latched PROM bit 0 (3B pin 12) -> 4A pin 14 (4A)
+  F1             -- latched PROM bit 1 (3B pin 5) -> 4A pin 11 (3A)
+  F2             -- latched PROM bit 2 (3B pin 2) -> 4A pin 5 (2A)
+  F3             -- latched PROM bit 3 (3B pin 15) -> 4A pin 2 (1A)
+  ST2            -- state bit 2 (from State Machine Clock sub-block)
+  ST3            -- state bit 3 (from Decoder Disable sub-block)
+  /STROBE0       -- decoded strobe (active low, state $C, 3D pin 5)
+  /STROBE1       -- decoded strobe (active low, state $D, 3D pin 6)
+  /STROBE2       -- decoded strobe (active low, state $E, 3D pin 7)
+  /STROBE3       -- decoded strobe (active low, state $F, 3D pin 9)
+  /LATCH0        -- decoded latch (active low, state $8, 3D pin 1)
+  /LATCH1        -- decoded latch (active low, state $9, 3D pin 2)
+  /LATCH2        -- decoded latch (active low, state $A, 3D pin 3)
+  /LATCH3        -- decoded latch (active low, state $B, 3D pin 4)
+
+CHIPS:
+  1E    LS02     -- NOR gate: HALT* NOR GO -> AM7 for PROM address
+  2E    LS32     -- OR gate: SA OR 4B pin 9 (04) -> Decoder Disable
+  4C    LS157    -- 2:1 mux: selects PROM address upper nibble (SA control)
+  4A    LS157    -- 2:1 mux: selects PROM address lower nibble (SA control)
+  4B    PROM     -- 136021-109.4b (256x4-bit bipolar PROM)
+  3B    LS174    -- Hex D flip-flop: latches HALT and PROM outputs
+  3D    LS42     -- BCD-to-decimal decoder: decodes {ST3, 4B:03, 4B:02, 4B:01}
+
+LOGIC:
+  1E(LS02):      AM7 = NOR(HALT*, GO)                 -- pins 11,12->13
+     
+
+  2E(LS32):      ST3_OR_SA = SA OR 4B_pin9_04         -- pins 13,12->11
+ 
+  
+  4C(LS157):     S = SA                              -- pin 1 (select)
+                 /G = SA                             -- pin 15 (enable, active low)
+                Channel 3: 3A(pin 11)=AM7(1E out), 3B(pin 10)=?, 3Y(pin 9)->4B A7(pin 15)
+                Channel 4: 4A(pin 14)=OP2,         4B(pin 13)=AM6, 4Y(pin 12)->4B A6(pin 1)
+                Channel 1: 1A(pin 2)=OP1,          1B(pin 3)=AM5,  1Y(pin 4)->4B A5(pin 2)
+                Channel 2: 2A(pin 5)=OP0,          2B(pin 6)=AM4,  2Y(pin 7)->4B A4(pin 3)
+
+  4A(LS157):     S = SA                              -- pin 1 (select)
+                 /G = SA                             -- pin 15 (enable, active low)
+                 ; When SA=0: A inputs selected (latched feedback F0-F3)
+                 ; When SA=1: B inputs selected (frozen AM values)
+                 ;
+                 Channel 1: 1A(pin 2)=F3(3B pin 15), 1B(pin 3)=AM3,  1Y(pin 4)->4B A3(pin 4)
+                 Channel 2: 2A(pin 5)=F2(3B pin 2),  2B(pin 6)=AM2,  2Y(pin 7)->4B A2(pin 7)
+                 Channel 3: 3A(pin 11)=F1(3B pin 5), 3B(pin 10)=AM1, 3Y(pin 9)->4B A1(pin 6)
+                 Channel 4: 4A(pin 14)=F0(3B pin 12),4B(pin 13)=AM0, 4Y(pin 12)->4B A0(pin 5)
+
+  4B(PROM):      136021-109.4b (256x4-bit bipolar PROM)
+                 Address pins:
+                 A0=pin 5, A1=pin 6, A2=pin 7, A3=pin 4
+                 A4=pin 3, A5=pin 2, A6=pin 1, A7=pin 15
+                 Output pins:
+                 pin 12=01, pin 11=02, pin 10=03, pin 9=04
+         
+  3B(LS174):     C   = /VGRST                        -- pin 1 (async clear, labeled C on schematic)
+                 CK  = State Machine Clock output     -- pin 9
+                 ;
+                 ; D inputs (from PROM 4B and HALT flag):
+                 D2  = HALT                           -- pin 6 (from Halt Flag 1H pin 9)
+                 D5  = 4B pin 9  (04)                 -- pin 14
+                 D0  = 4B pin 10 (03)                 -- pin 3
+                 D1  = 4B pin 11 (02)                 -- pin 4
+                 D4  = 4B pin 12 (01)                 -- pin 13
+                 ;
+                 ; Q outputs (latched on CK edge):
+                 Q2  = HALT*                          -- pin 7  -> 1E pin 12 (feedback)
+                 Q5  = F3                             -- pin 15 -> 4A pin 2 (1A)
+                 Q0  = F2                             -- pin 2  -> 4A pin 5 (2A)
+                 Q1  = F1                             -- pin 5  -> 4A pin 11 (3A)
+                 Q4  = F0                             -- pin 12 -> 4A pin 14 (4A)
+                 ;
+                 ; Signal path summary:
+                 ;   4B pin 12 (01) -> 3B pin 13 -> F0 (pin 12) -> 4A pin 14
+                 ;   4B pin 11 (02) -> 3B pin 4  -> F1 (pin 5)  -> 4A pin 11
+                 ;   4B pin 10 (03) -> 3B pin 3  -> F2 (pin 2)  -> 4A pin 5
+                 ;   4B pin 9  (04) -> 3B pin 14 -> F3 (pin 15) -> 4A pin 2
+                 ;   HALT           -> 3B pin 6  -> HALT* (pin 7) -> 1E pin 12
+                 ; D3/Q3 (pins 10/11) not used in this circuit.
+
+  3D(LS42):      A = 4B pin 12 (01)                  -- pin 15 (direct from PROM)
+                 B = 4B pin 11 (02)                  -- pin 14 (direct from PROM)
+                 C = 4B pin 10 (03)                  -- pin 13 (direct from PROM)
+                 D = ST3                             -- pin 12 (from Decoder Disable)
+                 ; LS42 is a BCD-to-decimal decoder (active LOW outputs).
+                 ; When ST3=0: all outputs 0-7 are inactive (no strobe/latch).
+                 ; When ST3=1: outputs 0-7 decode as:
+                 ;   pin 1 -> /LATCH0   (state $8: {ST3,03,02,01}=1000)
+                 ;   pin 2 -> /LATCH1   (state $9: {ST3,03,02,01}=1001)
+                 ;   pin 3 -> /LATCH2   (state $A: {ST3,03,02,01}=1010)
+                 ;   pin 4 -> /LATCH3   (state $B: {ST3,03,02,01}=1011)
+                 ;   pin 5 -> /STROBE0  (state $C: {ST3,03,02,01}=1100)
+                 ;   pin 6 -> /STROBE1  (state $D: {ST3,03,02,01}=1101)
+                 ;   pin 7 -> /STROBE2  (state $E: {ST3,03,02,01}=1110)
+                 ;   pin 9 -> /STROBE3  (state $F: {ST3,03,02,01}=1111)
+                 ; Note: pin 8 = GND, so output 7 is on pin 9.
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: State Machine Clock              *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.3 (top-left sub-block)
+; IMAGE: Schematics\_page_24_Figure_3.jpeg
+; ------------------------------------------------------------------------------
+;
+; Generates the gated clock for the state machine latch (3B) and ST2.
+; Uses two NOR gates from 3E (LS02) and the other half of 2D (LS74).
+
+SIGNALS IN:
+  ST2            -- state bit 2 (feedback from own output)
+  /VMEM          -- vector memory access (active low)
+  /1.5 MHZ       -- 1.5 MHz timing clock (active low / inverted)
+  12 MHZ         -- master clock
+  PR109          -- system timing preset
+
+SIGNALS OUT:
+  SM_CLK         -- gated state machine clock (2D pin 8, /Q) -> 3B pin 9 (CK)
+  3E_pin10       -- gate 3 output -> Decoder Disable block (2D pin 2)
+
+CHIPS:
+  3E    LS02     -- NOR gates (two gates used from quad NOR)
+  2D    LS74     -- D flip-flop (other half of dual LS74, shared with Decoder Disable)
+
+LOGIC:
+  3E(LS02) gate 1: NOR(ST2, /VMEM)                   -- pins 5,6->4
+                   ; ST2 on pin 5, /VMEM on pin 6
+                   ; Output pin 4: high only when ST2=0 AND /VMEM=0
+                   ;   i.e. not in state 2 AND memory access active
+
+  3E(LS02) gate 3: NOR(pin 8, /1.5 MHZ)              -- pins 8,9->10
+                   ; pin 8 connection to be verified
+                   ; /1.5 MHZ on pin 9
+                   ; Output pin 10 -> Decoder Disable (2D pin 2, D input)
+
+  2D(LS74):      D  = 3E output                       -- pin 12 (from 3E gate)
+                 CK = 12 MHZ                          -- pin 11
+                 P  = PR109                            -- pin 10 (preset, active low)
+                 C  = PR109                            -- pin 13 (clear, active low)
+                 Q  = (unused)                         -- pin 9
+                 /Q = SM_CLK                           -- pin 8 -> 3B pin 9 (CK)
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: Decoder Disable                 *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.3 (top-right sub-block)
+; IMAGE: Schematics\_page_24_Figure_3.jpeg
+; ------------------------------------------------------------------------------
+;
+; Generates ST3 from PROM output 04. PR109 presets the flip-flop during
+; power-up to prevent false strobe/latch outputs from 3D (LS42).
+
+SIGNALS IN:
+  2E_pin11       -- SA OR 4B pin 9 (04) (from State Machine block, 2E LS32 pin 11)
+  3E_pin10       -- from State Machine Clock block (3E pin 10)
+  PR109          -- system timing preset
+  12 MHZ         -- master clock
+
+SIGNALS OUT:
+  ST3            -- state bit 3 (/Q, pin 6) -> 3D pin 12 (D input of LS42 decoder)
+
+CHIPS:
+  2D    LS74     -- D flip-flop (one half of dual LS74)
+
+LOGIC:
+  2D(LS74):      D  = 3E_pin10                       -- pin 2 (from State Machine Clock block)
+                 CK = 12 MHZ                        -- pin 3
+                 P  = PR109                          -- pin 4 (preset, active low)
+                 Q  = (unused)                       -- pin 5
+                 /Q = ST3                            -- pin 6 -> 3D pin 12
+                 C  = 2E_pin11                       -- pin 1 (SA OR 4B_04, active low clear)
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: Go Flag                         *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.3 (right side)
+; IMAGE: Schematics\_page_24_Figure_3.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  VCTR           -- vector drawing active
+  CNTR           -- center active
+
+SIGNALS OUT:
+  GO             -- drawing/centering in progress
+
+CHIPS:
+  2E    LS32     -- OR gate
+
+LOGIC:
+  2E(LS32):      GO = VCTR OR CNTR                  -- pins 9,10->8
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: VCTR Flag (Vector Drawing)      *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.4 (upper portion)
+; IMAGE: Schematics\_page_24_Figure_4.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  OP2            -- opcode bit 2 (non-inverted, from 4H LS175 Q)
+  OP0            -- opcode bit 0 (non-inverted, from 4H LS175 Q)
+  ST3_GATE       -- VGCK OR /STROBE3 (from Center Flag block, 2E pin 3)
+  /STOP          -- timer overflow (active low)
+  PR109          -- system timing preset
+  /HALT          -- inverted halt (async clear)
+
+SIGNALS OUT:
+  VCTR           -- vector drawing active (Q output, pin 10) -> Go Flag (2E pin 9),
+                 --   Normalization Flag (3F pin 3)
+  /VCTR          -- inverted vector drawing (pin 9)
+
+CHIPS:
+  1F    LS27     -- Triple 3-input NOR (one gate used for J-input gating)
+  2F    JK-FF    -- JK flip-flop (upper half of dual JK, same package as Center Flag)
+
+LOGIC:
+  1F(LS27):      J_INPUT = NOR(OP2, OP0, ST3_GATE)  -- pins 1,2,13->12
+
+  2F(JK-FF):     J  = J_INPUT                       -- pin 14 (from 1F pin 12)
+                 /K = /STOP                          -- pin 13 (active low)
+                 CK = 12 MHZ                        -- pin 12
+                 P  = PR109                          -- pin 11 (preset)
+                 C  = /HALT                          -- pin 15 (async clear)
+                 Q  = VCTR                           -- pin 10
+                 /Q = /VCTR                          -- pin 9
+
+
+; ------------------------------------------------------------------------------
+; BLOCK: Center Flag                    *** VERIFIED 2026-05-30 ***
+; Sheet 13A, p.24 Fig.4
+; IMAGE: Schematics\_page_24_Figure_4.jpeg
+; ------------------------------------------------------------------------------
+;
+; Controls the /CENTER analog signal that resets the X/Y integrators.
+
+SIGNALS IN:
+  VGCK           -- VG clock
+  /STROBE3       -- PROM state $F (active low from LS42 decoder)
+  /OP2           -- inverted opcode bit 2 (from 4H LS175 /Q)
+  /STOP          -- timer overflow (active low)
+  PR109          -- system timing preset
+  /HALT          -- inverted halt (async clear)
+
+SIGNALS OUT:
+  CNTR           -- center active flag (Q output, pin 6) -> Go Flag (2E pin 10),
+                 --   Normalization Flag (3F pin 13)
+  /CENTER        -- analog signal to integrators (active low, 2H pin 11)
+  ST3_GATE       -- VGCK OR /STROBE3 (2E pin 3) -> Center Flag NOR (3H pin 9),
+                 --   Vector Flag box (1F pin 13)
+
+CHIPS:
+  2E    LS32     -- OR gate: VGCK OR /STROBE3
+  3H    LS02     -- NOR gate: NOR(LS32_out, /OP2) -> J input
+  2F    JK-FF    -- JK flip-flop (lower half of dual JK)
+  2H    LS08     -- AND gate: /Q AND (enable) -> /CENTER
+
+LOGIC:
+  2E(LS32):      ST3_GATE = VGCK OR /STROBE3         -- pins 1,2->3
+                 ; ST3_GATE=0 only when VGCK=0 AND /STROBE3=0 (STROBE3 active)
+                 ; ST3_GATE=1 otherwise (blocks J-inputs of CNTR and VCTR flags)
+  3H(LS02):      J_INPUT   = NOR(ST3_GATE, /OP2)     -- pins 9,10->8
+                 ; J=1 only when BOTH ST3_GATE=0 AND /OP2=0
+                 ; i.e. J=1 when VGCK=0, STROBE3 active, AND OP2=1
+                 ; For CENTER (OP2=1, /OP2=0): J CAN go high at STROBE3
+                 ; For VCTR/SVEC (OP2=0, /OP2=1): J is ALWAYS 0
+
+  2F(JK-FF):     J  = J_INPUT                       -- pin 2
+                 /K = /STOP                          -- pin 3 (active low)
+                 CK = 12 MHZ                        -- pin 4
+                 P  = PR109                          -- pin 5 (preset)
+                 C  = /HALT                          -- pin 1 (async clear)
+                 Q  = CNTR                           -- pin 6
+                 /Q =                                -- pin 7 -> to AND gate (2H pin 12)
+
+  2H(LS08):      /CENTER = /Q AND /HALT              -- pins 12,13->11
+                 ; Pin 12 = /Q from 2F (pin 7): HIGH when CNTR=0
+                 ; Pin 13 = /HALT: HIGH when not halted
+                 ; /CENTER=1 when NOT centering (CNTR=0) AND running (/HALT=1)
+                 ; /CENTER=0 when centering (CNTR=1) OR halted
+
+
+; ============================================================================
+; SHEET 13B (p.25) - Timer and Scaling
+; ============================================================================
+
+; ------------------------------------------------------------------------------
+; BLOCK: Vector Timer          *** VERIFIED 2026-05-30 ***
+; Sheet 13B, p.25 Fig.0
+; IMAGE: Schematics\_page_25_Figure_0.jpeg
+; ------------------------------------------------------------------------------
+
+SIGNALS IN:
+  PR111          -- +5V Pull-up resistor array
+  GO             -- count enable (VCTR OR CNTR, from Go Flag block)
+  NORM           -- normalization active (from Normalization Flag block)
+  SCALE          -- bin_scale active
+  OP1            -- opcode bit 1 -> 1E pin 2
+  /OP1           -- inverted opcode bit 1 -> 1B pin 1 (C), 2B pin 1 (C), 3A pin 10
+  12 MHZ         -- master clock
+  /SA            -- inverted signature analysis -> 2A(LS02) pin 12, 3Ab pin 4
+
+SIGNALS OUT:
+  /STOP          -- timer overflow (active low) -> VCTR Flag /K, Center Flag /K
+
+CHIPS:
+  1D    LS161    -- Timer bits 3:0 (lowest)
+  1C    LS161    -- Timer bits 7:4
+  1B    LS161    -- Timer bits 11:8
+  2B    LS161    -- Timer bits 14:12 (highest)
+  3H    LS02     -- NOR: SCALE NOR NORM -> fill enable
+  1A    LS08     -- AND: carry propagation (1D TC gating)
+  3Ab   LS00     -- NAND: fill cascade gate (gate 2 of 3A package)
+  3A    LS00     -- NAND: carry/overflow logic
+  1E    LS02     -- NOR: OP1 gating
+  2C    LS11     -- AND-3: 3-input AND (carry to 2B)
+  2A    LS20     -- NAND-4: overflow detection (part of 2A package)
+  2A    LS02     -- NOR: /STOP generation (part of 2A package)
+
+LOGIC:
+  ; Fill-bit control:
+  3H(LS02):      FILL_EN = NOR(SCALE, NORM)          -- pins 11,12->13
+
+  ; -- Counter 1D (bits 3:0, lowest) --
+  ; Q->P shift-fill feedback: QA->not connected, QB->A, QC->B, QD->C (left-shift during load)
+  1D(LS161):     C  = PR111                          -- pin 1 (clear tied to +5V)
+                 CK = 12 MHZ                          -- pin 2
+                 A  <- QB (pin 13)                     -- pin 3 (shift feedback)
+                 B  <- QC (pin 12)                     -- pin 4 (shift feedback)
+                 C  <- QD (pin 11)                     -- pin 5 (shift feedback)
+                 D  <- 1C QA (pin 14)                  -- pin 6 (cascade from 1C)
+                 EP = GO                              -- pin 7 (count enable parallel)
+                 ET = GO                              -- pin 10 (count enable trickle)
+                 LD = FILL_EN                         -- pin 9 (parallel load)
+                 QA-QD: bits 0-3                      -- pins 14,13,12,11
+                 RIP (pin 15) -> 1A pin 2, 1C EP (pin 7),
+                                2C pin 9, 2A(LS02) pin 9  -- four destinations
+
+  ; -- Counter 1C (bits 7:4) --
+  ; Q->P shift-fill feedback: QA->1D D, QB->A, QC->B, QD->C (left-shift during load)
+  1C(LS161):     C  = PR111                          -- pin 1 (clear tied to +5V)
+                 CK = 12 MHZ                          -- pin 2
+                 A  <- QB (pin 13)                     -- pin 3 (shift feedback)
+                 B  <- QC (pin 12)                     -- pin 4 (shift feedback)
+                 C  <- QD (pin 11)                     -- pin 5 (shift feedback)
+                 D  <- 3Ab(LS00) pin 6                 -- pin 6 (cascade from 3Ab)
+                 EP = 1D RIP (pin 15)                  -- pin 7 (carry from 1D)
+                 ET = PR111                            -- pin 10 (enable trickle tied to +5V)
+                 LD = FILL_EN                         -- pin 9 (parallel load)
+                 QA-QD: bits 4-7                      -- pins 14,13,12,11
+                 QA (pin 14) -> 1D D (pin 6)           -- shift cascade to lower counter
+                 RIP (pin 15) -> 1A pin 1,
+                                2C pin 10,
+                                2A(LS02) pin 10
+
+  ; -- Carry gate 1A (LS08 AND) --
+  1A(LS08):      pin 2 = 1D RIP (pin 15)
+                 pin 1 = 1C RIP (pin 15)
+                 pin 3 = output -> 1B EP (pin 7)
+
+  ; -- Counter 1B (bits 11:8) --
+  ; Q->P shift-fill feedback: QA->1E pin 3, QB->A, QC->B, QD->C (left-shift, fill enters at D)
+  1B(LS161):     C  = /OP1                            -- pin 1 (clear: /OP1=0 for SVEC
+                 ;                                       -> upper counters held reset)
+                 CK = 12 MHZ                          -- pin 2
+                 A  <- QB (pin 13)                     -- pin 3 (shift feedback)
+                 B  <- QC (pin 12)                     -- pin 4 (shift feedback)
+                 C  <- QD (pin 11)                     -- pin 5 (shift feedback)
+                 D  <- 2B QA (pin 14)                  -- pin 6 (cascade from 2B, same net
+                 ;                                       as 2A(LS20) pin 2)
+                 EP = 1A pin 3                         -- pin 7 (carry from 1A)
+                 ET = PR111                            -- pin 10 (enable trickle tied to +5V)
+                 LD = FILL_EN                         -- pin 9 (parallel load)
+                 QA-QD: bits 8-11                     -- pins 14,13,12,11
+                 QA (pin 14) -> 1E pin 3
+                 RIP (pin 15) -> 2C pin 11, 2A(LS20) pin 1  -- two destinations
+
+  ; -- Carry gate 2C (LS11 AND-3) --
+  2C(LS11):      pin 11 = 1B RIP (pin 15)
+                 pin 9  = 1D RIP (pin 15)
+                 pin 10 = 1C RIP (pin 15)
+                 pin 8  = output -> 2B EP (pin 7) AND 2B ET (pin 10)
+
+  ; -- Counter 2B (bits 14:12, highest) --
+  ; Q->P shift-fill feedback: QB->A, QC->B, QD-> not connected (left-shift, fill enters at C/D)
+  2B(LS161):     C  = /OP1                            -- pin 1 (clear: same as 1B)
+                 CK = 12 MHZ                          -- pin 2
+                 A  <- QB (pin 13)                     -- pin 3 (shift feedback)
+                 B  <- QC (pin 12)                     -- pin 4 (shift feedback)
+                 C  = PR111                            -- pin 5 (fill input, +5V loads '1's)
+                 D  = PR111                            -- pin 6 (fill input, +5V loads '1's)
+                 EP = 2C pin 8                         -- pin 7
+                 ET = 2C pin 8                         -- pin 10
+                 LD = FILL_EN                         -- pin 9 (parallel load)
+                 QA-QD: bits 12-14                    -- pins 14,13,12,11
+                 QA (pin 14) -> 1B D (pin 6), 2A(LS20) pin 2 -- same net
+                 QB (pin 13) -> 2A(LS20) pin 4
+                 QC (pin 12) -> 2A(LS20) pin 5
+                 RIP (pin 15) -> not used
+
+  ; -- OP1 gating --
+  ; 1E uses gate 1 of LS02 (pinout: A=pin2, B=pin3, Y=pin1)
+  1E(LS02):      pin 2 = OP1                          -- (input A)
+                 pin 3 = 1B QA (pin 14)               -- (input B)
+                 pin 1 = output -> 3Ab(LS00) pin 5
+                 ; NOR(OP1, 1B_QA): active when both OP1=0 and 1B_QA=0
+
+  ; -- Fill cascade gate 3Ab (LS00 NAND, gate 2: pins 4,5->6) --
+  ; Gates the shift-fill cascade from 1B to 1C.
+  ; When /SA=1 AND NOR(OP1,1B_QA)=1: output=0 (active fill bit into 1C).
+  3Ab(LS00):     pin 4 = /SA                           -- (input)
+                 pin 5 = 1E(LS02) pin 1                -- (input)
+                 pin 6 = output -> 1C D (pin 6)
+
+  ; -- Overflow / NAND logic --
+  3A(LS00):      pin 10 = /OP1                         -- (input)
+                 pin 9  = 2A(LS20) pin 6               -- (input)
+                 pin 8  = output -> 2A(LS02) pin 13
+
+  2A(LS20):      NAND-4 gate (gate 1: pins 1,2,4,5->6)
+                 pin 1 = 1B RIP (pin 15)
+                 pin 2 = 2B QA (pin 14)
+                 pin 4 = 2B QB (pin 13)
+                 pin 5 = 2B QC (pin 12)
+                 pin 6 = output -> 3A pin 9
+
+  ; -- /STOP generation --
+  ; Two NOR gates on 2A(LS02) cascaded to form a 4-input function:
+  ; /STOP = NOR(1D_RIP, 1C_RIP, /SA, overflow_gate)
+  ; Gate 4 (pins 12,13->11) output feeds gate 3 via external wiring.
+  2A(LS02):      pin 12 = /SA                          -- (gate 4 input A)
+                 pin 13 = 3A pin 8                     -- (gate 4 input B)
+                 pin 10 = 1C RIP (pin 15)              -- (gate 3 input B)
+                 pin 9  = 1D RIP (pin 15)              -- (gate 3 input A)
+                 pin 8  = /STOP output
+
+
+
+
