@@ -58,7 +58,7 @@ The MiSTer core automatically adapts to your chosen resolution and optimizes the
 
 For flat-panel displays, we highly recommend enabling the **HDR** option in the Mister.ini file, if your monitor supports it. You have two primary choices for the ultimate experience: **1080p 60Hz for High Resolution**, or **720p 120Hz for improved frame pacing and thicker vectors**. Both modes are ideally suited for **4K displays** because of the integer scaling ratio.
 
-Append these settings to your MiSTer INI file. Note that scaler filters are no longer needed and should be left blank (as shown below) to ensure maximum crispness.
+Append these settings to your `mister.ini` file under the exact `[Star Wars]` header. Please ensure there is only one Star Wars core file in your MiSTer's search paths. Note that scaler filters are no longer needed and should be left blank (as shown below) to ensure maximum crispness.
 
 ```ini
 [Star Wars]
@@ -67,6 +67,7 @@ vsync_adjust=2            ; Low-latency — locks HDMI output to core timing
 vscale_mode=0             ; Let the core's auto aspect ratio control scaling
 hdmi_limited=0            ; Set to 1 if the image is too dark (e.g. on limited range TVs)
 hdr=1                     ; HDR output — improves contrast/luminosity (Highly Recommended!)
+vrr=0                     ; Try setting to 1 (or higher) if you experience display issues (e.g. 120Hz).
 vfilter_default=          ; No filters needed! Leave blank.
 vfilter_vertical_default= ; Override any global vertical filter
 vfilter_scanlines_default=; Override any global scanline filter
@@ -74,6 +75,18 @@ vfilter_scanlines_default=; Override any global scanline filter
 > **Note:** Because 1080p resolution is high, the vector lines may appear slightly thin, which can make the overall picture look a little dark. If HDR is not an option or your Monitor/TVs controls do not yield satisfactory results, try setting `hdmi_limited=1` in your INI file.
 
 > **Note:** The empty filter lines (`vfilter_default=` etc.) in the INI snippet ensure that any global scaler filters from your `[MiSTer]` section are overridden.
+
+### 15kHz CRT / Pure Integer Scaling
+
+If you are outputting to a 15kHz CRT (e.g. via direct_video or analog VGA) or I recommend forcing the core's exact native resolution and aspect ratio:
+
+```ini
+[Star Wars]
+video_mode=640,240,60 ; Standard MiSTer 15kHz resolution. You can experiment with others, but ensure width >= 640 and height is around 240.
+vscale_mode=4
+vsync_adjust=0 ; You might want to try all three modes 0, 1 & 2
+```
+> **Tip:** `For 31kHz monitors you can use the same ini addition, just bump video mode to 640,480,60.`
 ---
 
 ## OSD Options
@@ -87,7 +100,7 @@ vfilter_scanlines_default=; Override any global scanline filter
 | **120Hz (720p only)** | Doubles the refresh rate to ~120Hz. Reduces Frame Pacing Latency and improves the look of Unbuffered Vectors. |
 | **Tone Mapping** | **Modern** (Recommended): Optimized for HDR displays. Even without HDR, it compresses the upper dynamic range less than legacy mode. This results in a slightly darker overall image but preserves intense highlights (e.g., hits on the red turrets in the tower sequence).<br>**Legacy**: The classic, older tone mapping style. |
 | **CRT Dot Bloom** | Simulates the intense phosphor bloom of the original analog CRT when drawing single-pixel dots. Options include **Pixel**, **Double**, and **Ellipse**. Leave it on **Auto** to let the core automatically pick the best shape based on your resolution. |
-| **CRT Overdrive** | Emulates the CRT's extreme off-screen overdrive that triggers a full-screen flash when your shields are hit or the Death Star explodes. |
+| **CRT Flash Hit** | Emulates the extreme overdriven off-screen drawn vectors that shine like a flash of light when your shields are hit or the Death Star explodes. |
 
 ### Cabinet Audio Hardware
 
@@ -129,8 +142,7 @@ The DIP switches in the OSD can configure starting shields, difficulty, coinage,
 ```
                                 *** Attention ***
 
-ROMs are not included. In order to use this arcade core, you need to provide the
-correct ROMs.
+ROMs are not included. In order to use this arcade core, you need to provide the correct ROMs (see mra for version).
 
 Quick reference for folders and file placement on your MiSTer SD card:
 
@@ -152,8 +164,6 @@ This core renders vectors as 1-pixel-wide lines on a raster framebuffer. A real 
 | **Beam Velocity** | Not modeled | Perceived brightness is inversely proportional to beam velocity. This core draws all vectors at uniform brightness per Z-level regardless of length. |
 | **Phosphor Persistence** | Not modeled | The P22 phosphor used in color vector CRTs has a visible afterglow decay (~1–10 ms depending on color channel). Moving objects leave fading trails. |
 | **Beam Overlap** | Not modeled | Where two vectors cross or overlap on a real CRT, the phosphor is excited twice, producing additive brightness and enhanced bloom at the intersection. |
-| **Intensity** | Limited Z-level support | The current implementation uses a simplified intensity mapping with fewer effective levels. |
-
 ---
 
 ## Compilation
@@ -171,7 +181,7 @@ The `sys/` directory contains the standard MiSTer framework. All core-specific R
 ## Credits & Acknowledgments
 
 - **Star Wars (Arcade):** Mike Hally (project lead), Greg Rivera & Norm Avellar (programming), Jed Margolin (hardware engineering), Ed Rotberg (original concept) — Atari, 1983
-- **Empire Strikes Back (Arcade):** Mike Hally (project lead), Greg Rivera & Norm Avellar (programming), Dave Ralston (artist), Brad Fuller (sound effects) — Atari, 1985
+- **Empire Strikes Back (Arcade):** Mike Hally (project lead), Greg Rivera & Norm Avellar (programming), Rob Row (technician), Dave Ralston (artist), Brad Fuller (sound effects) — Atari, 1985
 - **Initial FPGA Foundation:** Jeroen Domburg (Black Widow MiSTer core)
 - **6809 CPU Core:** Greg Miller (Cavnex mc6809e)
 - **MiSTer Platform:** Sorgelig and the MiSTer community

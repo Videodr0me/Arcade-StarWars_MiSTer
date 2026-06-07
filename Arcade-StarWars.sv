@@ -289,13 +289,13 @@ always @(posedge clk_50) begin
 		new_vmode_toggle <= ~new_vmode_toggle;
 end
 
-`include "build_id.v" 
 // Status Bit Map:
 //             Upper                             Lower              
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
 // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXX                           
+`include "build_id.v" 
 localparam CONF_STR = {
 	"Star Wars;;",
 	"-;",
@@ -306,8 +306,8 @@ localparam CONF_STR = {
 	"P3O2,Unbuffered Vectors,Off,On;",
 	"P3-;",
 	"P3OSTU,CRT Dot Bloom,Auto,Pixel,Double,Elipse;",
-	"P3OQ,CRT Overdrive (Hit Flash),On,Off;",
-	"P3OV,Tone Mapping,Modern,Legacy;",
+	"P3OQ,CRT Hit Flash,On,Off;",
+	"P3OV,Tone Mapping,Legacy (SDR),Modern (HDR);",
 	 "-;",
 	"P2,Cabinet Audio Hardware;",
 	"P2-;",
@@ -325,7 +325,7 @@ localparam CONF_STR = {
 	"P1-,* in Demo Loop - not DIPs!;",
 	"P1O1,Test Mode,Off,On;",
 	"P1-;",
-	// Star Wars DIPs (Totally invisible when ESB loaded)
+	// Star Wars DIPs
 	"h1P1O78,Starting Shields,8,9,6,7;",
 	"h1P1O9A,Difficulty,Moderate,Hard,Hardest,Easy;",
 	"h1P1OBC,Bonus Shields,1,2,3,0;",
@@ -335,7 +335,7 @@ localparam CONF_STR = {
 	"h1P1OL,Left Coin,x1,x2;",
 	"h1P1OMNO,Bonus Coin Adder,None,2 gives 1,4 gives 1,4 gives 2,5 gives 1,3 gives 1;",
 	"h1P1OG,Freeze,Off,On;",
-	// Empire Strikes Back DIPs (Totally invisible when SW loaded)
+	// Empire Strikes Back DIPs
 	"h2P1O78,Starting Shields,4,5,2,3;",
 	"h2P1O9A,Difficulty,Hard,Hardest,Easy,Moderate;",
 	"h2P1OBC,JEDI Letter Mode,Increment,Level,Inc. Only,Level Only;",
@@ -355,7 +355,7 @@ localparam CONF_STR = {
 	"R0,Reset;",
 	"J1,Fire L,Shield L,Aux Coin,Coin L,Coin R,Fire R,Shield R;",
 	"jn,A,B,Start,R,L,Y,Z;",
-	"V,v1.01.",`BUILD_DATE
+	"V,v1.02.",`BUILD_DATE
 };
 
 ////////////////////   CLOCKS   ///////////////////
@@ -565,20 +565,22 @@ assign AUDIO_R = audio_r;
 assign AUDIO_S = 1;
 wire vgade;
 
-// DIP SWITCHES LOGIC (SW0)
+// DIP SWITCHES (SW0)
 wire [7:0] m_dsw0 = {
-	~status[16],       // [7] Freeze (OG, 0=Off, 1=On -> ~0 = 1 = Off)
-	mod_esb ? ~status[13] : status[13],        // [6] Demo Sounds (OD, 0=On, 1=Off)
-	mod_esb ? ((status[12:11] == 2'b00) ? 2'b11 : (status[12:11] == 2'b11) ? 2'b00 : status[12:11]) : (status[12:11] + 2'd1), // [5:4] Bonus Shields / JEDI Letters (OBC)
-	mod_esb ? status[10:9] : (status[10:9] + 2'd1),                                                                           // [3:2] Difficulty (O9A)
-	mod_esb ? ~status[8:7] : (status[8:7] + 2'd2)                                                                             // [1:0] Starting Shields (O78)
+	~status[16],                                    // [7] Freeze (OG, 0=Off, 1=On -> ~0 = 1 = Off)
+	mod_esb ? ~status[13] : status[13],             // [6] Demo Sounds (OD, 0=On, 1=Off)
+	mod_esb ? ((status[12:11] == 2'b00) ? 2'b11 :
+			   (status[12:11] == 2'b11) ? 2'b00 : status[12:11]) :
+			   (status[12:11] + 2'd1),              // [5:4] Bonus Shields / JEDI Letters (OBC)
+	mod_esb ? status[10:9] : (status[10:9] + 2'd1), // [3:2] Difficulty (O9A)
+	mod_esb ? ~status[8:7] : (status[8:7] + 2'd2)   // [1:0] Starting Shields (O78)
 };
-// DIP SWITCHES LOGIC (SW1)	
+// DIP SWITCHES (SW1)	
 wire [7:0] m_dsw1 = {
-	status[24:22],     // [7:5] Bonus Coin Adder (OMNO)
-	status[21],        // [4] Left Coin (OL)
-	status[20:19],     // [3:2] Right Coin (OJK)
-	status[18:17] + 2'd2   // [1:0] Coinage (OHI, rotated +2: 0=1P/C,1=2C/P,2=Free,3=2P/C)
+	status[24:22],       // [7:5] Bonus Coin Adder (OMNO)
+	status[21],          // [4] Left Coin (OL)
+	status[20:19],       // [3:2] Right Coin (OJK)
+	status[18:17] + 2'd2 // [1:0] Coinage (OHI, rotated +2: 0=1P/C,1=2C/P,2=Free,3=2P/C)
 };
 
 starwars starwars_core
@@ -593,7 +595,7 @@ starwars starwars_core
 	.osd_audio_delay(~status[6]),    // Inverted: OSD 0=On, 1=Off
 	.osd_120hz_mode(osd_120hz_mode),
 	.osd_star_pattern(status[30:28]),
-	.osd_legacy_tone(status[31]),
+	.osd_tonemapping(status[31]),
 	.osd_disable_flash(status[26]),
 	.HDMI_HEIGHT(HDMI_HEIGHT),
 

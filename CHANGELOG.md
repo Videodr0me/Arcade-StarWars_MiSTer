@@ -1,7 +1,15 @@
 # Changelog
-
 All notable changes to this project will be documented in this file.
 
+## Release [20260607]
+
+### Added
+- **High Performance 32bpp HD Renderer**: A highly optimized rendering engine featuring full support for the Z-axis intensity channel. Enjoy the game's glorious, slow fade-to-black transitions in all their beauty.
+
+### Changed
+- **Video Timings**: Minor tweaks to 480p and 240p timings.
+- **Tone Mapping**: Legacy tone mapping is now the default (you may have to adjust your setting).
+- **15kHz Modlines**: Added 15kHz modlines and some tips for video settings to readme file.
 ## Release [20260603]
 
 ### Added
