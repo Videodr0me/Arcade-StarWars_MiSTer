@@ -33,8 +33,8 @@ module starwars (
 	input         osd_audio_filter,   // 1=On (TL084 LPF active), 0=Off (bypass)
 	input         osd_audio_delay,    // 1=On (Reticon delay/stereo active), 0=Off (bypass)
 	input         osd_120hz_mode,     // 1=120Hz (ce_pix always high), 0=60Hz (ce_pix toggles)
-	input   [2:0] osd_star_pattern,   // Star shape selected from OSD
-	input         osd_legacy_tone,    // 0=Modern LUT, 1=Legacy x3 multiplier
+	input   [2:0] osd_star_pattern,   // Dot scaling selected from OSD
+	input         osd_tonemapping,    // 0=Legacy x3 (SDR default), 1=Modern LUT (HDR)
 	input         osd_disable_flash,  // Option to disable hit flash
 
 	// Mod selector: 0 = Star Wars (default), 1 = Empire Strikes Back.
@@ -900,69 +900,66 @@ module starwars (
 	assign audio_out_l = audio_out_l_reg;
 	assign audio_out_r = audio_out_r_reg;
 
-	// =========================================================================
-	// Z-Axis Intensity Remapping (Non-Linear Curve)
-	// =========================================================================
-	reg [4:0] z_lut[0:255] = '{default:0};
+	// Z-Axis Intensity Tone Mapping
+	reg [7:0] z_lut[0:255] = '{default:0};
 	initial begin
-		z_lut[0] = 5'd0; z_lut[1] = 5'd0; z_lut[2] = 5'd1; z_lut[3] = 5'd1; z_lut[4] = 5'd1;
-		z_lut[5] = 5'd1; z_lut[6] = 5'd1; z_lut[7] = 5'd2; z_lut[8] = 5'd2; z_lut[9] = 5'd2;
-		z_lut[10] = 5'd3; z_lut[11] = 5'd3; z_lut[12] = 5'd3; z_lut[13] = 5'd3; z_lut[14] = 5'd3;
-		z_lut[15] = 5'd4; z_lut[16] = 5'd4; z_lut[17] = 5'd4; z_lut[18] = 5'd4; z_lut[19] = 5'd5;
-		z_lut[20] = 5'd5; z_lut[21] = 5'd5; z_lut[22] = 5'd5; z_lut[23] = 5'd6; z_lut[24] = 5'd6;
-		z_lut[25] = 5'd6; z_lut[26] = 5'd6; z_lut[27] = 5'd7; z_lut[28] = 5'd7; z_lut[29] = 5'd7;
-		z_lut[30] = 5'd7; z_lut[31] = 5'd8; z_lut[32] = 5'd8; z_lut[33] = 5'd8; z_lut[34] = 5'd8;
-		z_lut[35] = 5'd9; z_lut[36] = 5'd9; z_lut[37] = 5'd9; z_lut[38] = 5'd9; z_lut[39] = 5'd9;
-		z_lut[40] = 5'd10; z_lut[41] = 5'd10; z_lut[42] = 5'd10; z_lut[43] = 5'd11; z_lut[44] = 5'd11;
-		z_lut[45] = 5'd11; z_lut[46] = 5'd11; z_lut[47] = 5'd11; z_lut[48] = 5'd12; z_lut[49] = 5'd12;
-		z_lut[50] = 5'd12; z_lut[51] = 5'd12; z_lut[52] = 5'd13; z_lut[53] = 5'd13; z_lut[54] = 5'd13;
-		z_lut[55] = 5'd13; z_lut[56] = 5'd14; z_lut[57] = 5'd14; z_lut[58] = 5'd14; z_lut[59] = 5'd14;
-		z_lut[60] = 5'd15; z_lut[61] = 5'd15; z_lut[62] = 5'd15; z_lut[63] = 5'd15; z_lut[64] = 5'd16;
-		z_lut[65] = 5'd16; z_lut[66] = 5'd16; z_lut[67] = 5'd16; z_lut[68] = 5'd16; z_lut[69] = 5'd17;
-		z_lut[70] = 5'd17; z_lut[71] = 5'd17; z_lut[72] = 5'd18; z_lut[73] = 5'd18; z_lut[74] = 5'd18;
-		z_lut[75] = 5'd18; z_lut[76] = 5'd18; z_lut[77] = 5'd19; z_lut[78] = 5'd19; z_lut[79] = 5'd19;
-		z_lut[80] = 5'd19; z_lut[81] = 5'd20; z_lut[82] = 5'd20; z_lut[83] = 5'd20; z_lut[84] = 5'd20;
-		z_lut[85] = 5'd21; z_lut[86] = 5'd21; z_lut[87] = 5'd21; z_lut[88] = 5'd21; z_lut[89] = 5'd22;
-		z_lut[90] = 5'd22; z_lut[91] = 5'd22; z_lut[92] = 5'd22; z_lut[93] = 5'd23; z_lut[94] = 5'd23;
-		z_lut[95] = 5'd23; z_lut[96] = 5'd23; z_lut[97] = 5'd23; z_lut[98] = 5'd24; z_lut[99] = 5'd24;
-		z_lut[100] = 5'd24; z_lut[101] = 5'd24; z_lut[102] = 5'd25; z_lut[103] = 5'd25; z_lut[104] = 5'd25;
-		z_lut[105] = 5'd25; z_lut[106] = 5'd26; z_lut[107] = 5'd26; z_lut[108] = 5'd26; z_lut[109] = 5'd26;
-		z_lut[110] = 5'd27; z_lut[111] = 5'd27; z_lut[112] = 5'd27; z_lut[113] = 5'd28; z_lut[114] = 5'd28;
-		z_lut[115] = 5'd28; z_lut[116] = 5'd28; z_lut[117] = 5'd28; z_lut[118] = 5'd28; z_lut[119] = 5'd28;
-		z_lut[120] = 5'd28; z_lut[121] = 5'd28; z_lut[122] = 5'd28; z_lut[123] = 5'd28; z_lut[124] = 5'd28;
-		z_lut[125] = 5'd28; z_lut[126] = 5'd28; z_lut[127] = 5'd28; z_lut[128] = 5'd28; z_lut[129] = 5'd28;
-		z_lut[130] = 5'd28; z_lut[131] = 5'd28; z_lut[132] = 5'd28; z_lut[133] = 5'd28; z_lut[134] = 5'd28;
-		z_lut[135] = 5'd28; z_lut[136] = 5'd28; z_lut[137] = 5'd28; z_lut[138] = 5'd28; z_lut[139] = 5'd28;
-		z_lut[140] = 5'd28; z_lut[141] = 5'd28; z_lut[142] = 5'd28; z_lut[143] = 5'd28; z_lut[144] = 5'd28;
-		z_lut[145] = 5'd28; z_lut[146] = 5'd28; z_lut[147] = 5'd28; z_lut[148] = 5'd28; z_lut[149] = 5'd28;
-		z_lut[150] = 5'd28; z_lut[151] = 5'd28; z_lut[152] = 5'd28; z_lut[153] = 5'd28; z_lut[154] = 5'd29;
-		z_lut[155] = 5'd29; z_lut[156] = 5'd29; z_lut[157] = 5'd29; z_lut[158] = 5'd29; z_lut[159] = 5'd29;
-		z_lut[160] = 5'd29; z_lut[161] = 5'd29; z_lut[162] = 5'd29; z_lut[163] = 5'd29; z_lut[164] = 5'd29;
-		z_lut[165] = 5'd29; z_lut[166] = 5'd29; z_lut[167] = 5'd29; z_lut[168] = 5'd29; z_lut[169] = 5'd29;
-		z_lut[170] = 5'd29; z_lut[171] = 5'd29; z_lut[172] = 5'd29; z_lut[173] = 5'd29; z_lut[174] = 5'd29;
-		z_lut[175] = 5'd29; z_lut[176] = 5'd29; z_lut[177] = 5'd29; z_lut[178] = 5'd29; z_lut[179] = 5'd30;
-		z_lut[180] = 5'd30; z_lut[181] = 5'd30; z_lut[182] = 5'd30; z_lut[183] = 5'd30; z_lut[184] = 5'd30;
-		z_lut[185] = 5'd30; z_lut[186] = 5'd30; z_lut[187] = 5'd30; z_lut[188] = 5'd30; z_lut[189] = 5'd30;
-		z_lut[190] = 5'd30; z_lut[191] = 5'd30; z_lut[192] = 5'd30; z_lut[193] = 5'd30; z_lut[194] = 5'd30;
-		z_lut[195] = 5'd30; z_lut[196] = 5'd30; z_lut[197] = 5'd30; z_lut[198] = 5'd30; z_lut[199] = 5'd30;
-		z_lut[200] = 5'd31; z_lut[201] = 5'd31; z_lut[202] = 5'd31; z_lut[203] = 5'd31; z_lut[204] = 5'd31;
-		z_lut[205] = 5'd31; z_lut[206] = 5'd31; z_lut[207] = 5'd31; z_lut[208] = 5'd31; z_lut[209] = 5'd31;
-		z_lut[210] = 5'd31; z_lut[211] = 5'd31; z_lut[212] = 5'd31; z_lut[213] = 5'd31; z_lut[214] = 5'd31;
-		z_lut[215] = 5'd31; z_lut[216] = 5'd31; z_lut[217] = 5'd31; z_lut[218] = 5'd31; z_lut[219] = 5'd31;
-		z_lut[220] = 5'd31; z_lut[221] = 5'd31; z_lut[222] = 5'd31; z_lut[223] = 5'd31; z_lut[224] = 5'd31;
-		z_lut[225] = 5'd31; z_lut[226] = 5'd31; z_lut[227] = 5'd31; z_lut[228] = 5'd31; z_lut[229] = 5'd31;
-		z_lut[230] = 5'd31; z_lut[231] = 5'd31; z_lut[232] = 5'd31; z_lut[233] = 5'd31; z_lut[234] = 5'd31;
-		z_lut[235] = 5'd31; z_lut[236] = 5'd31; z_lut[237] = 5'd31; z_lut[238] = 5'd31; z_lut[239] = 5'd31;
-		z_lut[240] = 5'd31; z_lut[241] = 5'd31; z_lut[242] = 5'd31; z_lut[243] = 5'd31; z_lut[244] = 5'd31;
-		z_lut[245] = 5'd31; z_lut[246] = 5'd31; z_lut[247] = 5'd31; z_lut[248] = 5'd31; z_lut[249] = 5'd31;
-		z_lut[250] = 5'd31; z_lut[251] = 5'd31; z_lut[252] = 5'd31; z_lut[253] = 5'd31; z_lut[254] = 5'd31;
-		z_lut[255] = 5'd31;
+		z_lut[0] = 8'd0; z_lut[1] = 8'd2; z_lut[2] = 8'd3; z_lut[3] = 8'd5; z_lut[4] = 8'd7;
+		z_lut[5] = 8'd9; z_lut[6] = 8'd10; z_lut[7] = 8'd12; z_lut[8] = 8'd14; z_lut[9] = 8'd15;
+		z_lut[10] = 8'd17; z_lut[11] = 8'd19; z_lut[12] = 8'd21; z_lut[13] = 8'd22; z_lut[14] = 8'd24;
+		z_lut[15] = 8'd26; z_lut[16] = 8'd27; z_lut[17] = 8'd29; z_lut[18] = 8'd31; z_lut[19] = 8'd33;
+		z_lut[20] = 8'd34; z_lut[21] = 8'd36; z_lut[22] = 8'd38; z_lut[23] = 8'd39; z_lut[24] = 8'd41;
+		z_lut[25] = 8'd43; z_lut[26] = 8'd45; z_lut[27] = 8'd46; z_lut[28] = 8'd48; z_lut[29] = 8'd50;
+		z_lut[30] = 8'd52; z_lut[31] = 8'd54; z_lut[32] = 8'd56; z_lut[33] = 8'd58; z_lut[34] = 8'd60;
+		z_lut[35] = 8'd62; z_lut[36] = 8'd64; z_lut[37] = 8'd66; z_lut[38] = 8'd68; z_lut[39] = 8'd70;
+		z_lut[40] = 8'd72; z_lut[41] = 8'd74; z_lut[42] = 8'd76; z_lut[43] = 8'd78; z_lut[44] = 8'd80;
+		z_lut[45] = 8'd82; z_lut[46] = 8'd84; z_lut[47] = 8'd86; z_lut[48] = 8'd88; z_lut[49] = 8'd90;
+		z_lut[50] = 8'd92; z_lut[51] = 8'd94; z_lut[52] = 8'd96; z_lut[53] = 8'd98; z_lut[54] = 8'd100;
+		z_lut[55] = 8'd102; z_lut[56] = 8'd104; z_lut[57] = 8'd106; z_lut[58] = 8'd108; z_lut[59] = 8'd110;
+		z_lut[60] = 8'd112; z_lut[61] = 8'd114; z_lut[62] = 8'd116; z_lut[63] = 8'd118; z_lut[64] = 8'd120;
+		z_lut[65] = 8'd122; z_lut[66] = 8'd124; z_lut[67] = 8'd126; z_lut[68] = 8'd128; z_lut[69] = 8'd130;
+		z_lut[70] = 8'd132; z_lut[71] = 8'd134; z_lut[72] = 8'd136; z_lut[73] = 8'd138; z_lut[74] = 8'd140;
+		z_lut[75] = 8'd142; z_lut[76] = 8'd144; z_lut[77] = 8'd146; z_lut[78] = 8'd148; z_lut[79] = 8'd150;
+		z_lut[80] = 8'd152; z_lut[81] = 8'd154; z_lut[82] = 8'd156; z_lut[83] = 8'd158; z_lut[84] = 8'd160;
+		z_lut[85] = 8'd162; z_lut[86] = 8'd164; z_lut[87] = 8'd166; z_lut[88] = 8'd168; z_lut[89] = 8'd170;
+		z_lut[90] = 8'd172; z_lut[91] = 8'd174; z_lut[92] = 8'd176; z_lut[93] = 8'd178; z_lut[94] = 8'd180;
+		z_lut[95] = 8'd182; z_lut[96] = 8'd184; z_lut[97] = 8'd186; z_lut[98] = 8'd188; z_lut[99] = 8'd190;
+		z_lut[100] = 8'd192; z_lut[101] = 8'd194; z_lut[102] = 8'd196; z_lut[103] = 8'd198; z_lut[104] = 8'd200;
+		z_lut[105] = 8'd202; z_lut[106] = 8'd204; z_lut[107] = 8'd206; z_lut[108] = 8'd208; z_lut[109] = 8'd210;
+		z_lut[110] = 8'd212; z_lut[111] = 8'd214; z_lut[112] = 8'd216; z_lut[113] = 8'd216; z_lut[114] = 8'd217;
+		z_lut[115] = 8'd217; z_lut[116] = 8'd217; z_lut[117] = 8'd217; z_lut[118] = 8'd218; z_lut[119] = 8'd218;
+		z_lut[120] = 8'd218; z_lut[121] = 8'd219; z_lut[122] = 8'd219; z_lut[123] = 8'd219; z_lut[124] = 8'd219;
+		z_lut[125] = 8'd220; z_lut[126] = 8'd220; z_lut[127] = 8'd220; z_lut[128] = 8'd221; z_lut[129] = 8'd221;
+		z_lut[130] = 8'd221; z_lut[131] = 8'd221; z_lut[132] = 8'd222; z_lut[133] = 8'd222; z_lut[134] = 8'd222;
+		z_lut[135] = 8'd223; z_lut[136] = 8'd223; z_lut[137] = 8'd223; z_lut[138] = 8'd223; z_lut[139] = 8'd224;
+		z_lut[140] = 8'd224; z_lut[141] = 8'd224; z_lut[142] = 8'd225; z_lut[143] = 8'd225; z_lut[144] = 8'd225;
+		z_lut[145] = 8'd225; z_lut[146] = 8'd226; z_lut[147] = 8'd226; z_lut[148] = 8'd226; z_lut[149] = 8'd227;
+		z_lut[150] = 8'd227; z_lut[151] = 8'd227; z_lut[152] = 8'd227; z_lut[153] = 8'd228; z_lut[154] = 8'd228;
+		z_lut[155] = 8'd228; z_lut[156] = 8'd229; z_lut[157] = 8'd229; z_lut[158] = 8'd229; z_lut[159] = 8'd229;
+		z_lut[160] = 8'd230; z_lut[161] = 8'd230; z_lut[162] = 8'd230; z_lut[163] = 8'd231; z_lut[164] = 8'd231;
+		z_lut[165] = 8'd231; z_lut[166] = 8'd231; z_lut[167] = 8'd232; z_lut[168] = 8'd232; z_lut[169] = 8'd233;
+		z_lut[170] = 8'd233; z_lut[171] = 8'd234; z_lut[172] = 8'd234; z_lut[173] = 8'd235; z_lut[174] = 8'd235;
+		z_lut[175] = 8'd236; z_lut[176] = 8'd236; z_lut[177] = 8'd237; z_lut[178] = 8'd237; z_lut[179] = 8'd238;
+		z_lut[180] = 8'd239; z_lut[181] = 8'd239; z_lut[182] = 8'd240; z_lut[183] = 8'd240; z_lut[184] = 8'd241;
+		z_lut[185] = 8'd241; z_lut[186] = 8'd242; z_lut[187] = 8'd242; z_lut[188] = 8'd243; z_lut[189] = 8'd244;
+		z_lut[190] = 8'd244; z_lut[191] = 8'd245; z_lut[192] = 8'd245; z_lut[193] = 8'd246; z_lut[194] = 8'd246;
+		z_lut[195] = 8'd247; z_lut[196] = 8'd247; z_lut[197] = 8'd248; z_lut[198] = 8'd248; z_lut[199] = 8'd249;
+		z_lut[200] = 8'd250; z_lut[201] = 8'd250; z_lut[202] = 8'd251; z_lut[203] = 8'd251; z_lut[204] = 8'd252;
+		z_lut[205] = 8'd252; z_lut[206] = 8'd253; z_lut[207] = 8'd253; z_lut[208] = 8'd254; z_lut[209] = 8'd254;
+		z_lut[210] = 8'd255; z_lut[211] = 8'd255; z_lut[212] = 8'd255; z_lut[213] = 8'd255; z_lut[214] = 8'd255;
+		z_lut[215] = 8'd255; z_lut[216] = 8'd255; z_lut[217] = 8'd255; z_lut[218] = 8'd255; z_lut[219] = 8'd255;
+		z_lut[220] = 8'd255; z_lut[221] = 8'd255; z_lut[222] = 8'd255; z_lut[223] = 8'd255; z_lut[224] = 8'd255;
+		z_lut[225] = 8'd255; z_lut[226] = 8'd255; z_lut[227] = 8'd255; z_lut[228] = 8'd255; z_lut[229] = 8'd255;
+		z_lut[230] = 8'd255; z_lut[231] = 8'd255; z_lut[232] = 8'd255; z_lut[233] = 8'd255; z_lut[234] = 8'd255;
+		z_lut[235] = 8'd255; z_lut[236] = 8'd255; z_lut[237] = 8'd255; z_lut[238] = 8'd255; z_lut[239] = 8'd255;
+		z_lut[240] = 8'd255; z_lut[241] = 8'd255; z_lut[242] = 8'd255; z_lut[243] = 8'd255; z_lut[244] = 8'd255;
+		z_lut[245] = 8'd255; z_lut[246] = 8'd255; z_lut[247] = 8'd255; z_lut[248] = 8'd255; z_lut[249] = 8'd255;
+		z_lut[250] = 8'd255; z_lut[251] = 8'd255; z_lut[252] = 8'd255; z_lut[253] = 8'd255; z_lut[254] = 8'd255;
+		z_lut[255] = 8'd255;
 	end
 
 	wire [9:0] legacy_boosted_z = (avg_z << 1) + avg_z;
-	wire [4:0] legacy_final_z = (legacy_boosted_z > 10'd255) ? 5'd31 : legacy_boosted_z[7:3];
-
-	wire [4:0] final_z = osd_legacy_tone ? legacy_final_z : z_lut[avg_z];
+	wire [7:0] legacy_final_z = (legacy_boosted_z > 10'd255) ? 8'd255 : legacy_boosted_z[7:0];
+	wire [7:0] final_z = osd_tonemapping ? z_lut[avg_z] : legacy_final_z;
 	
 	// =========================================================================
 	// Resolution Detection and Scaling
@@ -984,17 +981,14 @@ module starwars (
 	reg signed [11:0] x_scaled;
 	reg signed [11:0] y_scaled;
 
-	wire signed [14:0] avg_x_ext = {{1{avg_x[13]}}, avg_x};
-	wire signed [14:0] avg_y_ext = {{1{avg_y[13]}}, avg_y};
-
-	// 19-bit intermediate wires for shift-and-add math without multipliers.
-	// Expanded by 4 bits to safely hold a 15-bit value shifted left by 4 (x16) without overflowing.
-	wire signed [18:0] avg_x_19 = {{4{avg_x_ext[14]}}, avg_x_ext};
-	wire signed [18:0] avg_y_19 = {{4{avg_y_ext[14]}}, avg_y_ext};
+	// 19-bit sign-extended AVG coordinates for shift-and-add scaling math.
+	// Auto sign-extends 14->19 to safely hold values shifted left by 5 (x32).
+	wire signed [18:0] avg_x_ext = $signed(avg_x);
+	wire signed [18:0] avg_y_ext = $signed(avg_y);
 	
 	wire is_1050p = (HDMI_HEIGHT >= 12'd1000 && HDMI_HEIGHT < 12'd1400);
 	wire is_700p  = (HDMI_HEIGHT >= 12'd600  && HDMI_HEIGHT < 12'd1000);
-	wire is_480p  = (HDMI_HEIGHT >= 12'd400  && HDMI_HEIGHT < 12'd600);
+	wire is_480p  = (HDMI_HEIGHT >= 12'd400  && HDMI_HEIGHT < 12'd700);
 	wire is_240p  = (HDMI_HEIGHT < 12'd400);
 
 	always @(*) begin
@@ -1005,7 +999,7 @@ module starwars (
 
 			fb_width  = 12'd1472;
 			fb_height = 12'd1050;
-			fb_stride = 14'd2048;
+			fb_stride = 14'd8192;
 			x_center  = 12'd736;
 			y_center  = 12'd525;
 			
@@ -1017,20 +1011,20 @@ module starwars (
 			vs_end_reg   = 12'd1065;
 			
 			// X_scale = 21/16 (1.3125) -> (X*16 + X*4 + X*1) / 16 (shifted by extra 3 bits for fraction)
-			x_scaled = ((avg_x_19 << 4) + (avg_x_19 << 2) + avg_x_19) >>> 7;
+			x_scaled = ((avg_x_ext << 4) + (avg_x_ext << 2) + avg_x_ext) >>> 7;
 			// Y_scale = 15/16 (0.9375) -> (Y*16 - Y*1) / 16 (shifted by extra 3 bits for fraction)
-			y_scaled = ((avg_y_19 << 4) - avg_y_19) >>> 7;
+			y_scaled = ((avg_y_ext << 4) - avg_y_ext) >>> 7;
 			
-		end else if (HDMI_HEIGHT < 12'd400) begin
+		end else if (is_240p) begin
 			// ---------------------------------------------------------
 			// 15kHz CRT Mode (Target: 240p Framebuffer)
 			// ---------------------------------------------------------
 			// Active area is 630x236 mapped directly to 640x240 buffer
 			fb_width  = 12'd640;
 			fb_height = 12'd240;
-			fb_stride = 14'd1024;
+			fb_stride = 14'd4096;
 			x_center  = 12'd320;
-			y_center  = 12'd120;
+			y_center  = 12'd121;
 			
 			h_total_reg  = 12'd851;  // 852 clocks (at 13.39 MHz -> 15.72 kHz)
 			v_total_reg  = 12'd261;  // 262 lines  (at 15.72 kHz -> 60.00 Hz)
@@ -1039,20 +1033,20 @@ module starwars (
 			vs_start_reg = 12'd245;
 			vs_end_reg   = 12'd248;
 			
-			// X_scale = 9/16 (0.5625) -> max 560 * 9/16 = +/- 315 (Active X: 630)
-			x_scaled = ((avg_x_19 << 3) + avg_x_19) >>> 7;
-			// Y_scale = 13/64 (0.2031) -> max 560 * 13/64 = +/- 113 (Active Y: 226)
-			y_scaled = ((avg_y_19 << 3) + (avg_y_19 << 2) + avg_y_19) >>> 9;
+			// X_scale = 41/64 (0.6406) -> max 499.5 * 41/64 = +/- 320 (Active X: 640)
+			x_scaled = ((avg_x_ext << 5) + (avg_x_ext << 3) + avg_x_ext) >>> 9;
+			// Y_scale = 27/128 (0.2109) -> 560 * 27/128 = 118 (Active Y: ~236)
+			y_scaled = ((avg_y_ext << 4) + (avg_y_ext << 3) + (avg_y_ext << 1) + avg_y_ext) >>> 10;
 			
-		end else if (HDMI_HEIGHT >= 12'd400 && HDMI_HEIGHT < 12'd700) begin
+		end else if (is_480p) begin
 			// ---------------------------------------------------------
 			// 480p Mode (Target: 480p Framebuffer)
 			// ---------------------------------------------------------
 			fb_width  = 12'd640;
 			fb_height = 12'd480;
-			fb_stride = 14'd1024;
+			fb_stride = 14'd4096;
 			x_center  = 12'd320;
-			y_center  = 12'd240;
+			y_center  = 12'd241;
 			
 			h_total_reg  = 12'd849;  // 850 clocks (at 26.78 MHz -> 31.5 kHz)
 			v_total_reg  = 12'd524;  // 525 lines  (at 31.5 kHz -> 60.02 Hz)
@@ -1061,18 +1055,18 @@ module starwars (
 			vs_start_reg = 12'd490;
 			vs_end_reg   = 12'd492;
 			
-			// X_scale = 9/16 (0.5625) -> max 560 * 9/16 = +/- 315 (Active X: 630)
-			x_scaled = ((avg_x_19 << 3) + avg_x_19) >>> 7;
-			// Y_scale = 13/32 (0.4062) -> max 560 * 13/32 = +/- 227 (Active Y: 454)
-			y_scaled = ((avg_y_19 << 3) + (avg_y_19 << 2) + avg_y_19) >>> 8;
-			
+			// X_scale = 41/64 (0.6406) -> max 499.5 * 41/64 = +/- 320 (Active X: 640)
+			x_scaled = ((avg_x_ext << 5) + (avg_x_ext << 3) + avg_x_ext) >>> 9;
+			// Y_scale = 27/64 (0.4219) -> 560 * 27/64 = 236 (Active Y: ~472)
+			y_scaled = ((avg_y_ext << 4) + (avg_y_ext << 3) + (avg_y_ext << 1) + avg_y_ext) >>> 9;
+				
 		end else begin
 			// ---------------------------------------------------------
 			// Default / 720p / 1440p+ (Target: 700p Framebuffer)
 			// ---------------------------------------------------------
 			fb_width  = 12'd980;
 			fb_height = 12'd700;
-			fb_stride = 14'd1024;
+			fb_stride = 14'd4096;
 			x_center  = 12'd490;
 			y_center  = 12'd350;
 			
@@ -1084,9 +1078,9 @@ module starwars (
 			vs_end_reg   = 12'd710;
 			
 			// X_scale = 7/8 (0.875) -> (X*8 - X*1) / 8
-			x_scaled = ((avg_x_19 << 3) - avg_x_19) >>> 6;
+			x_scaled = ((avg_x_ext << 3) - avg_x_ext) >>> 6;
 			// Y_scale = 5/8 (0.625) -> (Y*4 + Y*1) / 8
-			y_scaled = ((avg_y_19 << 2) + avg_y_19) >>> 6;
+			y_scaled = ((avg_y_ext << 2) + avg_y_ext) >>> 6;
 		end
 	end
 
@@ -1103,34 +1097,23 @@ module starwars (
 	wire [10:0] final_x = new_x[10:0];
 	wire [10:0] final_y = new_y[10:0];
 
-	wire beam_in_bounds = (new_x >= 12'sd0 && new_x < $signed(fb_width)) && 
-	                      (new_y >= 12'sd0 && new_y < $signed(fb_height));
+	wire beam_in_bounds = (new_x[11:0] < ((is_1050p) ? 12'd1470 : fb_width)) && (new_y[11:0] < fb_height);
 
-	// Independent effect detection based on raw vector generator boundaries (approx +/- 560)
-	// Extracted with 3 fractional bits so 560 * 8 = 4480
-	wire orig_in_bounds = (avg_x_ext >= -15'sd4480 && avg_x_ext < 15'sd4480) && (avg_y_ext >= -15'sd4480 && avg_y_ext < 15'sd4480);
-	
 	// The VJFCWN (Face Window) macro draws the shield hit/flash effect.
 	// It draws massive lines out to X=+/-960 and Y=+/-1024.
-	// To prevent standard zooming game geometry (like the Death Star) from falsely 
-	// triggering the flash, we strictly require the vector to be at the extreme edges.
-	// Extracted with 3 fractional bits so 900 * 8 = 7200, 950 * 8 = 7600
-	wire flash_trigger = (avg_x_ext >= 15'sd7200 || avg_x_ext <= -15'sd7200 || avg_y_ext <= -15'sd7600);
+	// Thresholds with 3 fractional bits: 900 * 8 = 7200, 950 * 8 = 7600
+	wire flash_trigger = ($signed(avg_x) >= 14'sd7200 || $signed(avg_x) <= -14'sd7200 || $signed(avg_y) <= -14'sd7600);
 
 	wire avg_is_dot;
-	wire [3:0] effect_code = 
-		(avg_is_dot && orig_in_bounds) ? 4'b0001 :
-		(flash_trigger && avg_rgb == 3'd7 && |avg_z) ? 4'b0010 : 4'b0000;
+	wire is_flash = flash_trigger && avg_rgb == 3'd7 && |avg_z && !avg_is_dot;
 
-	// CRT Dot Effect translation (Auto=0, Pixel=1, Double=2, Elipse=3)
+	// CRT Dot Scale translation (Auto=0, Pixel=1, Double=2, Elipse=3)
 	wire [2:0] actual_star_pattern;
 	assign actual_star_pattern = (osd_star_pattern == 3'd0) ? 
 	                             ((HDMI_HEIGHT >= 12'd700) ? 3'd2 : 3'd0) : 
 	                             (osd_star_pattern - 3'd1);
 
-	// ---------------------------------------------------------
 	// Resolution-Independent Flash Accumulator (12 MHz)
-	// ---------------------------------------------------------
 	reg [7:0] flash_param = 0;
 	reg [3:0] flash_sub = 0;
 	reg       last_vblank = 0;
@@ -1153,7 +1136,7 @@ module starwars (
 				end
 			end
 			// 2. Accumulate during AVG drawing (runs at 12 MHz)
-			else if (!mod_esb && !osd_disable_flash && effect_code == 4'b0010 && |avg_z) begin
+			else if (!mod_esb && !osd_disable_flash && is_flash) begin
 				flash_sub <= flash_sub + 1'b1;
 				if (flash_sub == 4'd12 && flash_param < 21) begin
 					flash_param <= flash_param + 1'b1;
@@ -1162,29 +1145,33 @@ module starwars (
 		end
 	end
 
+	// Synchronize flash_param
+	reg [7:0] flash_param_s1 = 0, flash_param_s2 = 0;
+	always @(posedge clk_vid) begin
+		flash_param_s1 <= flash_param;
+		flash_param_s2 <= flash_param_s1;
+	end
+
 	// Vector to Raster Conversion
 	wire fifo_full_led;
 	vector_fb_ddram rasterizer (
 		.reset(reset),
-		.clk_sys(clk_50),
+		.clk_sys(clk_vid),
 		.clk_12(clk_12),
 
 		.X_VECTOR(final_x),
 		.Y_VECTOR(final_y),
 		.Z_VECTOR(final_z),
 		.RGB(avg_rgb),
-		.EFFECT(effect_code),
-		.BEAM_ENA(1'b1),
-		// Do not send flash effect vectors (>= 2) to the FIFO to prevent overflow in high resolutions.
-		// vector_fb_ddram only needs to process standard vectors (0) and star effects (1).
-		.BEAM_ON(|avg_z && ((effect_code == 4'b0000 && beam_in_bounds) || effect_code == 4'b0001)),
+		.IS_DOT(avg_is_dot),
+		.BEAM_ON(|avg_z && beam_in_bounds && !is_flash),
 		
 		.START_FRAME(avg_go),
 		.FRAME_DONE(avg_halted),
 		.OSD_FLICKER(osd_raster_flicker),
 		.STAR_PATTERN(actual_star_pattern),
 		.FIFO_FULL_LED(fifo_full_led),
-		.FLASH_PARAM(flash_param),
+		.FLASH_PARAM(flash_param_s2),
 		.OSD_120HZ(osd_120hz_mode),
 
 		.DDRAM_CLK(DDRAM_CLK),
