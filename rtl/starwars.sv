@@ -42,6 +42,9 @@ module starwars (
 	// $8000-$9FFF and a wider main ROM (64KB vs SW's 32KB).
 	input         mod_esb,
 	input  [11:0] HDMI_HEIGHT,
+	input  [1:0]  ar,
+	output [12:0] VIDEO_ARX,
+	output [12:0] VIDEO_ARY,
 	
 	// DDRAM Framebuffer Interface
 	output        DDRAM_CLK,
@@ -128,6 +131,11 @@ module starwars (
 	assign      main_firq = 1'b0;
 	assign      main_nmi = 1'b0;
 
+	// Clock Domain Crossing (CDC) Reset Synchronizer for clk_12
+	reg [1:0] rst_12_sync = 2'b11;
+	always @(posedge clk_12) rst_12_sync <= {rst_12_sync[0], reset};
+	wire rst_12 = rst_12_sync[1];
+
 	// ~246.09Hz Timer for Main IRQ
 	// clk_12 is 12.096 MHz. Hardware divider is 4096 * 12 = 49152 cycles.
 	// 12096000 / 49152 = 246.09375 Hz.
@@ -135,7 +143,7 @@ module starwars (
 	wire irq_ack = (main_addr >= 16'h4660 && main_addr <= 16'h467F) && !main_rw && main_vma;
 	
 	always @(posedge clk_12) begin
-		if (reset) begin
+		if (rst_12) begin
 			irq_timer <= 16'd0;
 			main_irq_reg <= 1'b0;
 		end else begin
@@ -156,7 +164,7 @@ module starwars (
 	reg [2:0] ce_div = 0;
 	reg       ce_1m5 = 0;
 	always @(posedge clk_12) begin
-		if (reset) begin
+		if (rst_12) begin
 			ce_div <= 0;
 			ce_1m5 <= 0;
 		end else begin
@@ -168,7 +176,7 @@ module starwars (
 	cpu09 main_cpu(
 		.clk(clk_12),
 		.ce(ce_1m5),
-		.rst(reset),
+		.rst(rst_12),
 		.rw(main_rw),
 		.vma(main_vma),
 		.addr(main_addr),
@@ -191,7 +199,7 @@ module starwars (
 	
 	reg [7:0] aud_rst_cnt;
 	always @(posedge clk_12) begin
-		if (reset) begin
+		if (rst_12) begin
 			aud_rst_cnt <= 8'h0;
 		end else if (soundrst_we) begin
 			aud_rst_cnt <= 8'hFF;
@@ -200,7 +208,7 @@ module starwars (
 		end
 	end
 
-	wire        aud_reset = reset | (aud_rst_cnt > 0); // Assert reset if global reset OR during extended software reset
+	wire        aud_reset = rst_12 | (aud_rst_cnt > 0); // Assert reset if global reset OR during extended software reset
 	wire        aud_irq_n; // Driven by A6532 RIOT (Active Low)
 	wire        aud_irq = ~aud_irq_n; // Invert for CPU09
 	wire        aud_nmi = 1'b0; // No NMI on Audio CPU
@@ -274,7 +282,7 @@ module starwars (
 	mathbox mbox (
 		.clk(clk_12),
 		.ce(ce_1m5),
-		.reset(reset),
+		.reset(rst_12),
 		.prng_reset(~outlatch[5]),
 		.cpu_addr(main_addr),
 		.cpu_din(main_dout),
@@ -315,7 +323,7 @@ module starwars (
 	reg [7:0] outlatch;
 	wire outlatch_we = (main_addr >= 16'h4680 && main_addr <= 16'h4687) && !main_rw && main_vma;
 	always @(posedge clk_12) begin
-		if (reset) outlatch <= 8'h00;
+		if (rst_12) outlatch <= 8'h00;
 		else if (outlatch_we) outlatch[main_addr[2:0]] <= main_dout[7];
 	end
 	
@@ -345,7 +353,7 @@ module starwars (
 	wire mainlatch_re = (main_addr == 16'h4400) && main_rw && main_vma;
 
 	always @(posedge clk_12) begin
-		if (reset) begin
+		if (rst_12) begin
 			mainlatch_full <= 1'b0;
 			soundlatch_full <= 1'b0;
 			mainlatch <= 8'h00;
@@ -482,7 +490,7 @@ module starwars (
 	slapstic101 u_slapstic (
 		.I_CK   (clk_12),
 		.I_STEP (slap_step),
-		.I_RESET(reset),
+		.I_RESET(rst_12),
 		.I_A    (main_addr),       // FULL 16-bit address (in- and out-of-range)
 		.O_BS   (slap_bs)
 	);
@@ -617,7 +625,7 @@ module starwars (
 		.cpu_data_in(),
 		.cpu_data_out(main_dout),
 		
-		.vgrst(reset | avg_rst_cmd),
+		.vgrst(rst_12 | avg_rst_cmd),
 		.vggo(avg_go),
 		.halted(avg_halted),
 		
@@ -847,7 +855,7 @@ module starwars (
 	wire signed [16:0] filtered_mix;
 	audio_filter_tl084 pcb_filter (
 		.clk(clk_12),
-		.reset(reset),
+		.reset(rst_12),
 		.ce(ce_48k),
 		.enable(osd_audio_filter),
 		.audio_in(raw_mix),
@@ -862,7 +870,7 @@ module starwars (
 	wire signed [16:0] delay_wet;
 	reticon_r5106 pcb_delay (
 		.clk(clk_12),
-		.reset(reset),
+		.reset(rst_12),
 		.ce(ce_48k),
 		.enable(osd_audio_delay),
 		.audio_in(filtered_mix),
@@ -970,6 +978,8 @@ module starwars (
 	reg [13:0] fb_stride;
 	reg [11:0] x_center;
 	reg [11:0] y_center;
+	reg [12:0] auto_arx;
+	reg [12:0] auto_ary;
 
 	reg [11:0] h_total_reg;
 	reg [11:0] v_total_reg;
@@ -986,10 +996,10 @@ module starwars (
 	wire signed [18:0] avg_x_ext = $signed(avg_x);
 	wire signed [18:0] avg_y_ext = $signed(avg_y);
 	
-	wire is_1050p = (HDMI_HEIGHT >= 12'd1000 && HDMI_HEIGHT < 12'd1400);
-	wire is_700p  = (HDMI_HEIGHT >= 12'd600  && HDMI_HEIGHT < 12'd1000);
-	wire is_480p  = (HDMI_HEIGHT >= 12'd400  && HDMI_HEIGHT < 12'd700);
-	wire is_240p  = (HDMI_HEIGHT < 12'd400);
+	wire is_1050p = (HDMI_HEIGHT >= 12'd1050 && HDMI_HEIGHT < 12'd1400);
+	wire is_700p  = (HDMI_HEIGHT >= 12'd700  && HDMI_HEIGHT < 12'd1050);
+	wire is_480p  = (HDMI_HEIGHT >= 12'd480  && HDMI_HEIGHT < 12'd700);
+	wire is_240p  = (HDMI_HEIGHT < 12'd480);
 
 	always @(*) begin
 		if (is_1050p) begin
@@ -1002,6 +1012,8 @@ module starwars (
 			fb_stride = 14'd8192;
 			x_center  = 12'd736;
 			y_center  = 12'd525;
+			auto_arx  = 13'h1000 | 13'd1472;
+			auto_ary  = 13'h1000 | 13'd1050;
 			
 			h_total_reg  = 12'd1653; // 1654 clocks -> exactly 59.98 Hz frame rate
 			v_total_reg  = 12'd1079; // 1080 lines
@@ -1025,6 +1037,8 @@ module starwars (
 			fb_stride = 14'd4096;
 			x_center  = 12'd320;
 			y_center  = 12'd121;
+			auto_arx  = 13'h1000 | 13'd640;
+			auto_ary  = 13'h1000 | 13'd240;
 			
 			h_total_reg  = 12'd851;  // 852 clocks (at 13.39 MHz -> 15.72 kHz)
 			v_total_reg  = 12'd261;  // 262 lines  (at 15.72 kHz -> 60.00 Hz)
@@ -1047,6 +1061,8 @@ module starwars (
 			fb_stride = 14'd4096;
 			x_center  = 12'd320;
 			y_center  = 12'd241;
+			auto_arx  = 13'h1000 | 13'd640;
+			auto_ary  = 13'h1000 | 13'd480;
 			
 			h_total_reg  = 12'd849;  // 850 clocks (at 26.78 MHz -> 31.5 kHz)
 			v_total_reg  = 12'd524;  // 525 lines  (at 31.5 kHz -> 60.02 Hz)
@@ -1070,6 +1086,14 @@ module starwars (
 			x_center  = 12'd490;
 			y_center  = 12'd350;
 			
+			if (HDMI_HEIGHT >= 12'd1400) begin
+				auto_arx = 13'h1000 | 13'd1960;
+				auto_ary = 13'h1000 | 13'd1400;
+			end else begin
+				auto_arx = 13'h1000 | 13'd980;
+				auto_ary = 13'h1000 | 13'd700;
+			end
+			
 			h_total_reg  = 12'd1239; // 1240 clocks -> ~43.2 kHz
 			v_total_reg  = 12'd719;  // 720 lines -> exactly 60.00 Hz
 			hs_start_reg = 12'd1020;
@@ -1088,6 +1112,14 @@ module starwars (
 	assign FB_WIDTH  = fb_width;
 	assign FB_HEIGHT = fb_height;
 	assign FB_STRIDE = fb_stride;
+	
+	assign VIDEO_ARX = (ar == 0) ? auto_arx :                 // Optimized (auto-detect with integer scaling)
+	                   (ar == 1) ? 13'd0 :                    // Stretched
+	                               (13'h1000 | {1'b0, fb_width});   // Pixel Perfect (1:1 exact native render resolution)
+
+	assign VIDEO_ARY = (ar == 0) ? auto_ary :                 // Optimized (auto-detect with integer scaling)
+	                   (ar == 1) ? 13'd0 :                    // Stretched
+	                               (13'h1000 | {1'b0, fb_height});  // Pixel Perfect (1:1 exact native render resolution)
 
 	// Center and Invert Y
 	wire signed [11:0] new_x = x_center + x_scaled;
@@ -1104,8 +1136,7 @@ module starwars (
 	// Thresholds with 3 fractional bits: 900 * 8 = 7200, 950 * 8 = 7600
 	wire flash_trigger = ($signed(avg_x) >= 14'sd7200 || $signed(avg_x) <= -14'sd7200 || $signed(avg_y) <= -14'sd7600);
 
-	wire avg_is_dot;
-	wire is_flash = flash_trigger && avg_rgb == 3'd7 && |avg_z && !avg_is_dot;
+	wire is_flash = flash_trigger && avg_rgb == 3'd7 && |avg_z && !avg_is_dot && !avg_halted;
 
 	// CRT Dot Scale translation (Auto=0, Pixel=1, Double=2, Elipse=3)
 	wire [2:0] actual_star_pattern;
@@ -1116,24 +1147,22 @@ module starwars (
 	// Resolution-Independent Flash Accumulator (12 MHz)
 	reg [7:0] flash_param = 0;
 	reg [3:0] flash_sub = 0;
-	reg       last_vblank = 0;
+	reg [16:0] flash_tick_cnt = 0;
+	wire flash_tick = (flash_tick_cnt == 17'd99999);
 	
 	always @(posedge clk_12) begin
-		last_vblank <= vblank;
 		
-		if (reset) begin
+		if (rst_12) begin
 			flash_param <= 0;
 			flash_sub <= 0;
+			flash_tick_cnt <= 0;
 		end else begin
-			// 1. Decay on VBLANK edge (Priority)
-			if (vblank && !last_vblank) begin
-				if (osd_120hz_mode) begin
-					if (flash_param > 8'd2) flash_param <= flash_param - 8'd2;
-					else flash_param <= 0;
-				end else begin
-					if (flash_param > 8'd4) flash_param <= flash_param - 8'd4;
-					else flash_param <= 0;
-				end
+			flash_tick_cnt <= flash_tick ? 17'd0 : flash_tick_cnt + 17'd1;
+
+			// 1. Decay on 120Hz internal tick (Priority)
+			if (flash_tick) begin
+				if (flash_param > 8'd2) flash_param <= flash_param - 8'd2;
+				else flash_param <= 0;
 			end
 			// 2. Accumulate during AVG drawing (runs at 12 MHz)
 			else if (!mod_esb && !osd_disable_flash && is_flash) begin
@@ -1145,11 +1174,15 @@ module starwars (
 		end
 	end
 
-	// Synchronize flash_param
+	// Synchronize flash_param (Safe multi-bit CDC)
 	reg [7:0] flash_param_s1 = 0, flash_param_s2 = 0;
+	reg [7:0] flash_param_stable = 0;
 	always @(posedge clk_vid) begin
 		flash_param_s1 <= flash_param;
 		flash_param_s2 <= flash_param_s1;
+		if (flash_param_s1 == flash_param_s2) begin
+			flash_param_stable <= flash_param_s2;
+		end
 	end
 
 	// Vector to Raster Conversion
@@ -1171,7 +1204,7 @@ module starwars (
 		.OSD_FLICKER(osd_raster_flicker),
 		.STAR_PATTERN(actual_star_pattern),
 		.FIFO_FULL_LED(fifo_full_led),
-		.FLASH_PARAM(flash_param_s2),
+		.FLASH_PARAM(flash_param_stable),
 		.OSD_120HZ(osd_120hz_mode),
 
 		.DDRAM_CLK(DDRAM_CLK),
@@ -1214,9 +1247,9 @@ module starwars (
 	reg ce_pix;
 	always @(*) begin
 		if (osd_120hz_mode || is_1050p) ce_pix = 1'b1;                    // /1 (107.14 MHz)
-		else if (is_700p)               ce_pix = clk_div_cnt[0];          // /2 (53.57 MHz)
+		else if (is_240p)               ce_pix = (clk_div_cnt[2:0] == 0); // /8 (13.39 MHz)
 		else if (is_480p)               ce_pix = (clk_div_cnt[1:0] == 0); // /4 (26.78 MHz)
-		else                            ce_pix = (clk_div_cnt[2:0] == 0); // /8 (13.39 MHz)
+		else                            ce_pix = clk_div_cnt[0];          // /2 (53.57 MHz) - Default for 700p / 1440p+
 	end
 	assign CE_PIXEL = ce_pix;
 

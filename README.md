@@ -83,6 +83,7 @@ If you are outputting to a 15kHz CRT (e.g. via direct_video or analog VGA) or I 
 video_mode=640,240,60 ; Standard MiSTer 15kHz resolution. You can experiment with others, but ensure width >= 640 and height is around 240 e.g. video_mode=640,44,64,88,240,3,2,17,13150,-hsync,-vsync
 vscale_mode=4
 vsync_adjust=0 ; You might want to try all three modes 0, 1 & 2
+composite_sync=1 ; Try 1 = composite sync or 0 = seperate sync 
 ```
 > **Tip:** `For 31kHz monitors you can use the same ini addition, just bump video mode to 640,480,60.`
 ---

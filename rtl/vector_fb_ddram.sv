@@ -209,13 +209,18 @@ module vector_fb_ddram (
 		18'd0              // 17:0
 	};
 	
+	// CDC Reset Synchronizer for clk_12 (to safely catch the raw reset for wr_ptr)
+	reg [1:0] rst_12_sync = 2'b11;
+	always @(posedge clk_12) rst_12_sync <= {rst_12_sync[0], reset};
+	wire rst_12 = rst_12_sync[1];
+
 	always @(posedge clk_12) begin
 		last_x <= X_VECTOR;
 		last_y <= Y_VECTOR;
 		last_beam_on <= BEAM_ON;
 		last_frame_done <= FRAME_DONE;
 		
-		if (reset) begin
+		if (rst_12) begin
 			wr_ptr <= 0;
 			wr_ptr_g <= 0;
 		end else if (fifo_we) begin
@@ -262,6 +267,11 @@ module vector_fb_ddram (
 	wire stall_pipeline = (star_state != 0) || (diag_state != 0);
 	wire fifo_read_enable = !DDRAM_BUSY && !clearing_tile && !stall_pipeline && !fifo_empty && !draw_stall && !force_clear;
 	
+	// CDC Reset Synchronizer for clk_sys
+	reg [1:0] rst_sys_sync = 2'b11;
+	always @(posedge clk_sys) rst_sys_sync <= {rst_sys_sync[0], reset};
+	wire rst_sys = rst_sys_sync[1];
+
 	// Isolated read block to guarantee M10K BRAM inference
 	always @(posedge clk_sys) begin
 		if (fifo_read_enable) begin
@@ -396,7 +406,7 @@ module vector_fb_ddram (
 	reg        scan_go = 0;
 
 	always @(posedge clk_sys) begin
-		if (reset) begin
+		if (rst_sys) begin
 			scan_active <= 0;
 			group_active <= 0;
 			next_tile_valid <= 0;
@@ -510,7 +520,7 @@ module vector_fb_ddram (
 		vbl_swap_req <= 1'b0;
 		eof_swap_req <= 1'b0;
 
-		if (reset) begin
+		if (rst_sys) begin
 			if (clearing_tile) begin
 				if (DDRAM_BUSY) begin
 				end else begin

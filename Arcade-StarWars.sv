@@ -200,37 +200,6 @@ assign VGA_B = 0;
 
 wire [1:0] ar = status[15:14];
 
-// Auto-detect optimal aspect ratio from HDMI output resolution.
-// Match the internal framebuffer size to ensure exactly 4:3 or 1.4:1 scaling.
-reg [12:0] auto_arx, auto_ary;
-always @(*) begin
-	if (HDMI_HEIGHT >= 1050) begin
-		// 1080p Mode (1472x1050 Framebuffer)
-		auto_arx = 13'h1000 | 13'd1472;
-		auto_ary = 13'h1000 | 13'd1050;
-	end else if (HDMI_HEIGHT >= 700) begin
-		// 720p Mode (980x700 Framebuffer)
-		auto_arx = 13'h1000 | 13'd980;
-		auto_ary = 13'h1000 | 13'd700;
-	end else if (HDMI_HEIGHT >= 400) begin
-		// 480p Mode (640x480 Framebuffer) - Integer Scale (1:1)
-		auto_arx = 13'h1000 | 13'd640;
-		auto_ary = 13'h1000 | 13'd480;
-	end else begin
-		// 240p (15kHz) Mode (640x240 Framebuffer) - Integer Scale (1:1)
-		auto_arx = 13'h1000 | 13'd640;
-		auto_ary = 13'h1000 | 13'd240;
-	end
-end
-
-assign VIDEO_ARX = (ar == 0) ? auto_arx :  // Optimized (auto-detect)
-                   (ar == 1) ? 13'd0 :     // Stretched
-                               auto_arx;   // Pixel Perfect (1:1)
-
-assign VIDEO_ARY = (ar == 0) ? auto_ary :  // Optimized (auto-detect)
-                   (ar == 1) ? 13'd0 :     // Stretched
-                               auto_ary;   // Pixel Perfect (1:1)
-
 // 120Hz MODE — SAFE ACTIVATION
 // The HPS restores saved status bits (including status[25]=120Hz ON)
 // during boot, BEFORE HDMI_HEIGHT is valid during initialization -> HDMI sync loss.
@@ -598,6 +567,9 @@ starwars starwars_core
 	.osd_tonemapping(status[31]),
 	.osd_disable_flash(status[26]),
 	.HDMI_HEIGHT(HDMI_HEIGHT),
+	.ar(ar),
+	.VIDEO_ARX(VIDEO_ARX),
+	.VIDEO_ARY(VIDEO_ARY),
 
 	.mod_esb(mod_esb),
 	
