@@ -7,8 +7,6 @@ Atari's 1983 Star Wars remains one of the most beloved arcade games ever made. W
 ## Support the Project
 Hey, Videor0me here! If you're having a blast with this core, consider supporting the project: [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat-square&logo=buy-me-a-coffee)](https://buymeacoffee.com/Videodr0me)
 
-Your contributions show me that there is interest in these arcade projects. With enough support, I'd love to dedicate time to tackle other complex games or to improve the analog vector rendering effects. The goal is to be accurate to the original hardware, using schematics and reverse engineering to create a faithful FPGA implementation.
-
 ---
 
 ## Original Hardware
@@ -33,7 +31,7 @@ For those interested in the inner workings of the original arcade PCB, I have in
 
 Star Wars uses an analog flight yoke. The yoke's X and Y axes are mapped to the primary analog axes of your MiSTer controller (digital fallback input controls are available)
 
-> **🕹️ Calibration Tip:** The game **auto-calibrates** to your controller's range. When you first start playing, **move the analog stick in a full circle through its extreme positions** — this lets the game learn your stick's full range of motion. You can do this at any time, but the stage select screen is the ideal moment. If you use the digital input option, you may also need to press the directional pad in all directions (up, down, left, right) to calibrate.
+> **🕹️ Calibration Tip:** The game **auto-calibrates** to your controller's range. When you first start playing, **move the analog stick in a full circle through its extreme positions** — this lets the game learn your stick's full range of motion. You can do this at any time, but the stage select screen is the ideal moment. If you are using digital inputs, you must also calibrate by pressing up, down, left and right on the directional pad until the crosshair reaches the edges of the screen in all directions.
 
 | Input | Function |
 |---|---|
@@ -62,8 +60,8 @@ Append these settings to your `mister.ini` file under the exact `[Star Wars]` he
 
 ```ini
 [Star Wars]
-video_mode=0              ; Use 0 for 720p (enables 120Hz option) OR use 1920,1080,60 for 1080p
-vsync_adjust=2            ; Low-latency — locks HDMI output to core timing
+video_mode=8              ; 8 = 1080p or use 0 = 720p (enables 120Hz option)
+vsync_adjust=0            ; set to 1 or 2 for 720p 120Hz
 vscale_mode=0             ; Let the core's auto aspect ratio control scaling
 hdmi_limited=0            ; Set to 1 if the image is too dark (e.g. on limited range TVs)
 hdr=1                     ; HDR output — improves contrast/luminosity (Highly Recommended!)
@@ -82,7 +80,7 @@ If you are outputting to a 15kHz CRT (e.g. via direct_video or analog VGA) or I 
 
 ```ini
 [Star Wars]
-video_mode=640,240,60 ; Standard MiSTer 15kHz resolution. You can experiment with others, but ensure width >= 640 and height is around 240.
+video_mode=640,240,60 ; Standard MiSTer 15kHz resolution. You can experiment with others, but ensure width >= 640 and height is around 240 e.g. video_mode=640,44,64,88,240,3,2,17,13150,-hsync,-vsync
 vscale_mode=4
 vsync_adjust=0 ; You might want to try all three modes 0, 1 & 2
 ```
