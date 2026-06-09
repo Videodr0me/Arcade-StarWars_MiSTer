@@ -1133,10 +1133,15 @@ module starwars (
 
 	// The VJFCWN (Face Window) macro draws the shield hit/flash effect.
 	// It draws massive lines out to X=+/-960 and Y=+/-1024.
-	// Thresholds with 3 fractional bits: 900 * 8 = 7200, 950 * 8 = 7600
-	wire flash_trigger = ($signed(avg_x) >= 14'sd7200 || $signed(avg_x) <= -14'sd7200 || $signed(avg_y) <= -14'sd7600);
+	// We use an exact mathematical bounds check (with a small +/- 2 margin for absolute safety against FSM jitter).
+	wire x_match = ($signed(avg_x) >= 14'sd7678 && $signed(avg_x) <= 14'sd7682) || 
+	               ($signed(avg_x) >= -14'sd7682 && $signed(avg_x) <= -14'sd7678);
 
-	wire is_flash = flash_trigger && avg_rgb == 3'd7 && |avg_z && !avg_is_dot && !avg_halted;
+	wire y_match = ($signed(avg_y) >= -14'sd8194 && $signed(avg_y) <= -14'sd8190);
+
+	wire flash_trigger = x_match || y_match;
+
+	wire is_flash = flash_trigger && avg_rgb == 3'd7 && (avg_z ==8'd223) && !avg_is_dot && !avg_halted;
 
 	// CRT Dot Scale translation (Auto=0, Pixel=1, Double=2, Elipse=3)
 	wire [2:0] actual_star_pattern;
@@ -1165,7 +1170,7 @@ module starwars (
 				else flash_param <= 0;
 			end
 			// 2. Accumulate during AVG drawing (runs at 12 MHz)
-			else if (!mod_esb && !osd_disable_flash && is_flash) begin
+			else if (!osd_disable_flash && is_flash) begin
 				flash_sub <= flash_sub + 1'b1;
 				if (flash_sub == 4'd12 && flash_param < 21) begin
 					flash_param <= flash_param + 1'b1;
