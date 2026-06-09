@@ -215,26 +215,34 @@ always @(posedge clk_50) begin
 		boot_done <= 1;
 end
 
-// --- Stage 2: HDMI_HEIGHT validation
-// Require height to be in a valid range (600-720) and stable for ~335ms.
-wire is_720p_valid = (HDMI_HEIGHT >= 12'd600) & (HDMI_HEIGHT <= 12'd720);
-reg [24:0] stable_720p_cnt = 0;
-reg is_720p_stable = 0;
+// --- Stage 2: Universal HDMI_HEIGHT validation
+// Require height to be != 0 and stable for ~335ms.
+reg [11:0] last_hdmi_height = 0;
+reg [24:0] stable_hdmi_cnt = 0;
+reg is_hdmi_stable = 0;
+
 always @(posedge clk_50) begin
-	if (!is_720p_valid) begin
-		stable_720p_cnt <= 0;
-		is_720p_stable <= 0;
-	end else if (!stable_720p_cnt[24]) begin
-		stable_720p_cnt <= stable_720p_cnt + 1'd1;
+	if (HDMI_HEIGHT != last_hdmi_height || HDMI_HEIGHT == 12'd0) begin
+		last_hdmi_height <= HDMI_HEIGHT;
+		stable_hdmi_cnt <= 0;
+		is_hdmi_stable <= 0;
+	end else if (!stable_hdmi_cnt[24]) begin
+		stable_hdmi_cnt <= stable_hdmi_cnt + 1'd1;
 	end else begin
-		is_720p_stable <= 1;
+		is_hdmi_stable <= 1;
 	end
 end
+
+wire is_720p_valid = (HDMI_HEIGHT >= 12'd600) & (HDMI_HEIGHT <= 12'd720);
+wire is_720p_stable = is_hdmi_stable & is_720p_valid;
 
 // --- Stage 3: 120Hz mode signal
 // If boot holdoff expired, user wants 120Hz, and HDMI_HEIGHT has been stable.
 wire osd_120hz_mode = boot_done & status[25] & is_720p_stable;
 wire not_720p = ~is_720p_stable;
+
+// Universal Video Mode Stable Flag
+wire video_mode_stable = boot_done & is_hdmi_stable;
 
 // --- Video mode change notification ---
 reg new_vmode_toggle = 0;
@@ -574,6 +582,8 @@ starwars starwars_core
 	.mod_esb(mod_esb),
 	
 	.CE_PIXEL(CE_PIXEL),
+
+	.video_mode_stable(video_mode_stable),
 
 	// DDRAM Framebuffer Interface
 	.DDRAM_CLK(DDRAM_CLK),

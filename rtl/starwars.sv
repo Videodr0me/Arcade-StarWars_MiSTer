@@ -33,6 +33,7 @@ module starwars (
 	input         osd_audio_filter,   // 1=On (TL084 LPF active), 0=Off (bypass)
 	input         osd_audio_delay,    // 1=On (Reticon delay/stereo active), 0=Off (bypass)
 	input         osd_120hz_mode,     // 1=120Hz (ce_pix always high), 0=60Hz (ce_pix toggles)
+	input         video_mode_stable,
 	input   [2:0] osd_star_pattern,   // Dot scaling selected from OSD
 	input         osd_tonemapping,    // 0=Legacy x3 (SDR default), 1=Modern LUT (HDR)
 	input         osd_disable_flash,  // Option to disable hit flash
@@ -610,6 +611,7 @@ module starwars (
 	// AVG (Analog Vector Generator)
 	wire avg_go = (main_addr >= 16'h4600 && main_addr <= 16'h461F) && !main_rw && main_vma;
 	wire avg_rst_cmd = (main_addr >= 16'h4620 && main_addr <= 16'h463F) && !main_rw && main_vma;
+	wire avg_is_dot;
 
 	avg vector_generator (
 		.clk(clk_12),
@@ -909,7 +911,7 @@ module starwars (
 	assign audio_out_r = audio_out_r_reg;
 
 	// Z-Axis Intensity Tone Mapping
-	reg [7:0] z_lut[0:255] = '{default:0};
+	(* romstyle = "logic" *) reg [7:0] z_lut[0:255] = '{default:0};
 	initial begin
 		z_lut[0] = 8'd0; z_lut[1] = 8'd2; z_lut[2] = 8'd3; z_lut[3] = 8'd5; z_lut[4] = 8'd7;
 		z_lut[5] = 8'd9; z_lut[6] = 8'd10; z_lut[7] = 8'd12; z_lut[8] = 8'd14; z_lut[9] = 8'd15;
@@ -973,9 +975,9 @@ module starwars (
 	// Resolution Detection and Scaling
 	// =========================================================================
 	
-	reg [11:0] fb_width;
-	reg [11:0] fb_height;
-	reg [13:0] fb_stride;
+	reg [11:0] fb_width_tmp;
+	reg [11:0] fb_height_tmp;
+	reg [13:0] fb_stride_tmp;
 	reg [11:0] x_center;
 	reg [11:0] y_center;
 	reg [12:0] auto_arx;
@@ -996,31 +998,31 @@ module starwars (
 	wire signed [18:0] avg_x_ext = $signed(avg_x);
 	wire signed [18:0] avg_y_ext = $signed(avg_y);
 	
-	wire is_1050p = (HDMI_HEIGHT >= 12'd1050 && HDMI_HEIGHT < 12'd1400);
-	wire is_700p  = (HDMI_HEIGHT >= 12'd700  && HDMI_HEIGHT < 12'd1050);
-	wire is_480p  = (HDMI_HEIGHT >= 12'd480  && HDMI_HEIGHT < 12'd700);
+	wire is_1050p = (HDMI_HEIGHT >= 12'd1080 && HDMI_HEIGHT < 12'd1400);
+	wire is_700p  = (HDMI_HEIGHT >= 12'd720  && HDMI_HEIGHT < 12'd1080);
+	wire is_480p  = (HDMI_HEIGHT >= 12'd480  && HDMI_HEIGHT < 12'd720);
 	wire is_240p  = (HDMI_HEIGHT < 12'd480);
 
 	always @(*) begin
 		if (is_1050p) begin
 			// ---------------------------------------------------------
-			// 1080p Mode (Target: 1050p Framebuffer)
+			// 1080p Mode
 			// ---------------------------------------------------------
 
-			fb_width  = 12'd1472;
-			fb_height = 12'd1050;
-			fb_stride = 14'd8192;
+			fb_width_tmp  = 12'd1472;
+			fb_height_tmp = 12'd1080;
+			fb_stride_tmp = 14'd8192;
 			x_center  = 12'd736;
 			y_center  = 12'd525;
 			auto_arx  = 13'h1000 | 13'd1472;
-			auto_ary  = 13'h1000 | 13'd1050;
+			auto_ary  = 13'h1000 | 13'd1080;
 			
-			h_total_reg  = 12'd1653; // 1654 clocks -> exactly 59.98 Hz frame rate
-			v_total_reg  = 12'd1079; // 1080 lines
+			h_total_reg  = 12'd1587; // 1588 clocks -> mathematically 59.973 Hz
+			v_total_reg  = 12'd1124; // 1125 lines (Standard 45 lines of VBLANK)
 			hs_start_reg = 12'd1502;
 			hs_end_reg   = 12'd1542;
-			vs_start_reg = 12'd1060;
-			vs_end_reg   = 12'd1065;
+			vs_start_reg = 12'd1084;
+			vs_end_reg   = 12'd1089;
 			
 			// X_scale = 21/16 (1.3125) -> (X*16 + X*4 + X*1) / 16 (shifted by extra 3 bits for fraction)
 			x_scaled = ((avg_x_ext << 4) + (avg_x_ext << 2) + avg_x_ext) >>> 7;
@@ -1032,9 +1034,9 @@ module starwars (
 			// 15kHz CRT Mode (Target: 240p Framebuffer)
 			// ---------------------------------------------------------
 			// Active area is 630x236 mapped directly to 640x240 buffer
-			fb_width  = 12'd640;
-			fb_height = 12'd240;
-			fb_stride = 14'd4096;
+			fb_width_tmp  = 12'd640;
+			fb_height_tmp = 12'd240;
+			fb_stride_tmp = 14'd4096;
 			x_center  = 12'd320;
 			y_center  = 12'd121;
 			auto_arx  = 13'h1000 | 13'd640;
@@ -1056,9 +1058,10 @@ module starwars (
 			// ---------------------------------------------------------
 			// 480p Mode (Target: 480p Framebuffer)
 			// ---------------------------------------------------------
-			fb_width  = 12'd640;
-			fb_height = 12'd480;
-			fb_stride = 14'd4096;
+
+			fb_width_tmp  = 12'd640;
+			fb_height_tmp = 12'd480;
+			fb_stride_tmp = 14'd4096;
 			x_center  = 12'd320;
 			y_center  = 12'd241;
 			auto_arx  = 13'h1000 | 13'd640;
@@ -1078,28 +1081,28 @@ module starwars (
 				
 		end else begin
 			// ---------------------------------------------------------
-			// Default / 720p / 1440p+ (Target: 700p Framebuffer)
+			// Default / 720p / 1440p+
 			// ---------------------------------------------------------
-			fb_width  = 12'd980;
-			fb_height = 12'd700;
-			fb_stride = 14'd4096;
+			fb_width_tmp  = 12'd980;
+			fb_height_tmp = 12'd720;
+			fb_stride_tmp = 14'd4096;
 			x_center  = 12'd490;
 			y_center  = 12'd350;
 			
-			if (HDMI_HEIGHT >= 12'd1400) begin
+			if (HDMI_HEIGHT >= 12'd1440) begin
 				auto_arx = 13'h1000 | 13'd1960;
-				auto_ary = 13'h1000 | 13'd1400;
+				auto_ary = 13'h1000 | 13'd1440;
 			end else begin
 				auto_arx = 13'h1000 | 13'd980;
-				auto_ary = 13'h1000 | 13'd700;
+				auto_ary = 13'h1000 | 13'd720;
 			end
 			
-			h_total_reg  = 12'd1239; // 1240 clocks -> ~43.2 kHz
-			v_total_reg  = 12'd719;  // 720 lines -> exactly 60.00 Hz
+			h_total_reg  = 12'd1199; // 1200 clocks -> maintains EXACTLY 60.003 Hz
+			v_total_reg  = 12'd743;  // 744 lines (24 lines of VBLANK)
 			hs_start_reg = 12'd1020;
 			hs_end_reg   = 12'd1080;
-			vs_start_reg = 12'd705;
-			vs_end_reg   = 12'd710;
+			vs_start_reg = 12'd725;
+			vs_end_reg   = 12'd730;
 			
 			// X_scale = 7/8 (0.875) -> (X*8 - X*1) / 8
 			x_scaled = ((avg_x_ext << 3) - avg_x_ext) >>> 6;
@@ -1108,18 +1111,49 @@ module starwars (
 		end
 	end
 
+	reg [1:0] video_stable_sync = 2'b00;
+
+	reg [11:0] fb_width_stage1 = 0;
+	reg [11:0] fb_height_stage1 = 0;
+	reg [13:0] fb_stride_stage1 = 0;
+
+	reg [11:0] fb_width_stable = 0;
+	reg [11:0] fb_height_stable = 0;
+	reg [13:0] fb_stride_stable = 0;
+
+	always @(posedge clk_vid) begin
+		// Synchronize the stability flag into clk_vid domain
+		video_stable_sync <= {video_stable_sync[0], video_mode_stable};
+
+		// Stage 1: Pipeline the combinatorial values
+		fb_width_stage1  <= fb_width_tmp;
+		fb_height_stage1 <= fb_height_tmp;
+		fb_stride_stage1 <= fb_stride_tmp;
+
+		// Stage 2: Gate to stable output
+		if (!video_stable_sync[1]) begin
+			fb_width_stable  <= 12'd0;
+			fb_height_stable <= 12'd0;
+			fb_stride_stable <= 14'd0;
+		end else begin
+			fb_width_stable  <= fb_width_stage1;
+			fb_height_stable <= fb_height_stage1;
+			fb_stride_stable <= fb_stride_stage1;
+		end
+	end
+
 	// Drive the outputs to the MiSTer framework
-	assign FB_WIDTH  = fb_width;
-	assign FB_HEIGHT = fb_height;
-	assign FB_STRIDE = fb_stride;
+	assign FB_WIDTH  = fb_width_stable;
+	assign FB_HEIGHT = fb_height_stable;
+	assign FB_STRIDE = fb_stride_stable;
 	
 	assign VIDEO_ARX = (ar == 0) ? auto_arx :                 // Optimized (auto-detect with integer scaling)
 	                   (ar == 1) ? 13'd0 :                    // Stretched
-	                               (13'h1000 | {1'b0, fb_width});   // Pixel Perfect (1:1 exact native render resolution)
+	                               (13'h1000 | {1'b0, fb_width_tmp});   // Pixel Perfect (1:1 exact native render resolution)
 
 	assign VIDEO_ARY = (ar == 0) ? auto_ary :                 // Optimized (auto-detect with integer scaling)
 	                   (ar == 1) ? 13'd0 :                    // Stretched
-	                               (13'h1000 | {1'b0, fb_height});  // Pixel Perfect (1:1 exact native render resolution)
+	                               (13'h1000 | {1'b0, fb_height_tmp});  // Pixel Perfect (1:1 exact native render resolution)
 
 	// Center and Invert Y
 	wire signed [11:0] new_x = x_center + x_scaled;
@@ -1129,15 +1163,14 @@ module starwars (
 	wire [10:0] final_x = new_x[10:0];
 	wire [10:0] final_y = new_y[10:0];
 
-	wire beam_in_bounds = (new_x[11:0] < ((is_1050p) ? 12'd1470 : fb_width)) && (new_y[11:0] < fb_height);
+	wire beam_in_bounds = (new_x[11:0] < ((is_1050p) ? 12'd1470 : fb_width_tmp)) && (new_y[11:0] < fb_height_tmp);
 
 	// The VJFCWN (Face Window) macro draws the shield hit/flash effect.
 	// It draws massive lines out to X=+/-960 and Y=+/-1024.
-	// We use an exact mathematical bounds check (with a small +/- 2 margin for absolute safety against FSM jitter).
 	wire x_match = ($signed(avg_x) >= 14'sd7678 && $signed(avg_x) <= 14'sd7682) || 
 	               ($signed(avg_x) >= -14'sd7682 && $signed(avg_x) <= -14'sd7678);
 
-	wire y_match = ($signed(avg_y) >= -14'sd8194 && $signed(avg_y) <= -14'sd8190);
+	wire y_match = ($signed(avg_y) >= -14'sd8191 && $signed(avg_y) <= -14'sd8190);
 
 	wire flash_trigger = x_match || y_match;
 
@@ -1179,7 +1212,7 @@ module starwars (
 		end
 	end
 
-	// Synchronize flash_param (Safe multi-bit CDC)
+	// Synchronize flash_param
 	reg [7:0] flash_param_s1 = 0, flash_param_s2 = 0;
 	reg [7:0] flash_param_stable = 0;
 	always @(posedge clk_vid) begin
@@ -1225,10 +1258,10 @@ module starwars (
 
 		.FB_EN(FB_EN),
 		.FB_FORMAT(FB_FORMAT),
-		.FB_WIDTH(fb_width),
-		.FB_HEIGHT(fb_height),
+		.FB_WIDTH(fb_width_stable),
+		.FB_HEIGHT(fb_height_stable),
 		.FB_BASE(FB_BASE),
-		.FB_STRIDE(fb_stride),
+		.FB_STRIDE(fb_stride_stable),
 		.FB_VBL(FB_VBL),
 		.FB_LL(FB_LL),
 		.FB_FORCE_BLANK(FB_FORCE_BLANK),
@@ -1254,7 +1287,7 @@ module starwars (
 		if (osd_120hz_mode || is_1050p) ce_pix = 1'b1;                    // /1 (107.14 MHz)
 		else if (is_240p)               ce_pix = (clk_div_cnt[2:0] == 0); // /8 (13.39 MHz)
 		else if (is_480p)               ce_pix = (clk_div_cnt[1:0] == 0); // /4 (26.78 MHz)
-		else                            ce_pix = clk_div_cnt[0];          // /2 (53.57 MHz) - Default for 700p / 1440p+
+		else                            ce_pix = clk_div_cnt[0];          // /2 (53.57 MHz) - Default for 720p / 1440p+
 	end
 	assign CE_PIXEL = ce_pix;
 
@@ -1278,8 +1311,8 @@ module starwars (
 
 	assign hsync  = ~(h_cnt >= hs_start_reg[10:0] && h_cnt < hs_end_reg[10:0]);
 	assign vsync  = ~(v_cnt >= vs_start_reg[10:0] && v_cnt < vs_end_reg[10:0]);
-	assign hblank = (h_cnt >= fb_width[10:0]);
-	assign vblank = (v_cnt >= fb_height[10:0]);
+	assign hblank = (h_cnt >= fb_width_stable[10:0]);
+	assign vblank = (v_cnt >= fb_height_stable[10:0]);
 	
 	assign led = {fifo_full_led, 1'b0, 1'b0};
 

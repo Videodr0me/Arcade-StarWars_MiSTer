@@ -107,14 +107,14 @@ module vector_fb_ddram (
 	// FB_BASE outputs the ACTIVE buffer for display (byte address),
 	// while DDRAM_ADDR is a 64-bit word index (8 bytes per unit).
 	wire [28:0] buf0_word = 29'h06000000;
-	wire [28:0] buf1_word = (FB_STRIDE == 14'd8192) ? 29'h06108000 : 29'h06058000;
-	wire [28:0] buf2_word = (FB_STRIDE == 14'd8192) ? 29'h06210000 : 29'h060B0000;
-	wire [28:0] buf3_word = (FB_STRIDE == 14'd8192) ? 29'h06318000 : 29'h06108000;
+	wire [28:0] buf1_word = (FB_STRIDE == 14'd8192) ? 29'h06110000 : 29'h06060000;
+	wire [28:0] buf2_word = (FB_STRIDE == 14'd8192) ? 29'h06220000 : 29'h060C0000;
+	wire [28:0] buf3_word = (FB_STRIDE == 14'd8192) ? 29'h06330000 : 29'h06120000;
 
 	wire [31:0] buf0_byte = 32'h30000000;
-	wire [31:0] buf1_byte = (FB_STRIDE == 14'd8192) ? 32'h30840000 : 32'h302C0000;
-	wire [31:0] buf2_byte = (FB_STRIDE == 14'd8192) ? 32'h31080000 : 32'h30580000;
-	wire [31:0] buf3_byte = (FB_STRIDE == 14'd8192) ? 32'h318C0000 : 32'h30840000;
+	wire [31:0] buf1_byte = (FB_STRIDE == 14'd8192) ? 32'h30880000 : 32'h30300000;
+	wire [31:0] buf2_byte = (FB_STRIDE == 14'd8192) ? 32'h31100000 : 32'h30600000;
+	wire [31:0] buf3_byte = (FB_STRIDE == 14'd8192) ? 32'h31980000 : 32'h30900000;
 
 	assign FB_BASE = (display_buf == 2'd3) ? buf3_byte : 
 	                 (display_buf == 2'd2) ? buf2_byte : 
@@ -314,7 +314,7 @@ module vector_fb_ddram (
 	assign DDRAM_BURSTCNT = ddram_burst_reg;
 	
 	// SAFETY CLAMP !
-	wire safe_address = (ddram_addr_reg >= 29'h06000000) && (ddram_addr_reg <= 29'h0641FFFF);
+	wire safe_address = (ddram_addr_reg >= 29'h06000000) && (ddram_addr_reg <= 29'h064FFFFF);
 	assign DDRAM_WE = ddram_we_reg && safe_address;
 
 
@@ -328,6 +328,9 @@ module vector_fb_ddram (
 	// BRAM initializer
 	reg        bram_init = 1;
 	reg [15:0] bram_init_addr = 0;
+	
+	// Latch to capture 1-cycle reset pulses
+	reg reset_pending = 0;
 
 	// Pixel pipeline offset
 	wire [15:0] pix_offset = ({5'd0, stage3_line_y} << 5) + ({5'd0, stage3_line_y} << 4) + {10'd0, stage3_tile_x};
@@ -520,7 +523,7 @@ module vector_fb_ddram (
 		vbl_swap_req <= 1'b0;
 		eof_swap_req <= 1'b0;
 
-		if (rst_sys) begin
+		if (rst_sys || reset_pending || FB_WIDTH == 0 || FB_HEIGHT == 0) begin
 			if (clearing_tile) begin
 				if (DDRAM_BUSY) begin
 				end else begin
@@ -534,7 +537,10 @@ module vector_fb_ddram (
 						clear_x <= clear_x + 1'b1;
 					end
 				end
+				// Latch the reset request so we don't miss it when the burst finishes
+				if (rst_sys || FB_WIDTH == 0 || FB_HEIGHT == 0) reset_pending <= 1'b1;
 			end else begin
+				reset_pending <= 1'b0; // Clear latch
 				buf_state[0] <= ST_DISPLAY;
 				buf_state[1] <= ST_DIRTY;
 				buf_state[2] <= ST_DIRTY;
