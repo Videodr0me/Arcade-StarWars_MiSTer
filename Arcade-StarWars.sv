@@ -271,7 +271,7 @@ end
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX XXXXX                           
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  XXXXXXX                         
 `include "build_id.v" 
 localparam CONF_STR = {
 	"Star Wars;;",
@@ -284,7 +284,7 @@ localparam CONF_STR = {
 	"P3-;",
 	"P3OSTU,CRT Dot Bloom,Auto,Pixel,Double,Elipse;",
 	"P3OQ,CRT Hit Flash,On,Off;",
-	"P3OV,Tone Mapping,Legacy (SDR),Modern (HDR);",
+	"P3o56,Tone Mapping,Linear 1,Linear 2,Bright,Off;",
 	 "-;",
 	"P2,Cabinet Audio Hardware;",
 	"P2-;",
@@ -572,7 +572,7 @@ starwars starwars_core
 	.osd_audio_delay(~status[6]),    // Inverted: OSD 0=On, 1=Off
 	.osd_120hz_mode(osd_120hz_mode),
 	.osd_star_pattern(status[30:28]),
-	.osd_tonemapping(status[31]),
+	.osd_tonemapping(status[38:37]),
 	.osd_disable_flash(status[26]),
 	.HDMI_HEIGHT(HDMI_HEIGHT),
 	.ar(ar),

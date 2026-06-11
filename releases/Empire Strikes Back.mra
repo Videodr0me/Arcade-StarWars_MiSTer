@@ -14,7 +14,7 @@
 	<setname>esb</setname>
 	<parent>starwars</parent>
 	<mameversion>0218</mameversion>
-	<rbf>Arcade-StarWars</rbf>
+	<rbf>StarWars</rbf>
 	<about>Atari, 1985.  Sister hardware to Star Wars 1983.  Same AVG state
 	       PROM (136021-105.1l, CRC 82fc3eb2), same mathbox PROM interface,
 	       same audio chain — plus a slapstic chip (137412-101) for copy

@@ -35,7 +35,7 @@ module starwars (
 	input         osd_120hz_mode,     // 1=120Hz (ce_pix always high), 0=60Hz (ce_pix toggles)
 	input         video_mode_stable,
 	input   [2:0] osd_star_pattern,   // Dot scaling selected from OSD
-	input         osd_tonemapping,    // 0=Legacy x3 (SDR default), 1=Modern LUT (HDR)
+	input   [1:0] osd_tonemapping,    // 0=Linear 1, 1=Linear 2, 2=Bright, 3=Off
 	input         osd_disable_flash,  // Option to disable hit flash
 
 	// Mod selector: 0 = Star Wars (default), 1 = Empire Strikes Back.
@@ -967,9 +967,19 @@ module starwars (
 		z_lut[255] = 8'd255;
 	end
 
-	wire [9:0] legacy_boosted_z = (avg_z << 1) + avg_z;
-	wire [7:0] legacy_final_z = (legacy_boosted_z > 10'd255) ? 8'd255 : legacy_boosted_z[7:0];
-	wire [7:0] final_z = osd_tonemapping ? z_lut[avg_z] : legacy_final_z;
+	// Linear 1 (x1.21 expansion, maps 0-210 to 0-255)
+	wire [16:0] linear1_mult = avg_z * 17'd311;
+	wire [7:0] linear1_final_z = (avg_z >= 8'd210) ? 8'd255 : linear1_mult[15:8];
+
+	// Linear 2 (x1.52 expansion, current)
+	wire [16:0] linear2_mult = avg_z * 17'd389;
+	wire [7:0] linear2_final_z = (avg_z >= 8'd168) ? 8'd255 : linear2_mult[15:8];
+
+	wire [7:0] final_z = 
+		(osd_tonemapping == 2'd0) ? linear1_final_z : // Linear 1
+		(osd_tonemapping == 2'd1) ? linear2_final_z : // Linear 2
+		(osd_tonemapping == 2'd2) ? z_lut[avg_z] :    // Bright (HDR LUT)
+		avg_z; // Off
 	
 	// =========================================================================
 	// Resolution Detection and Scaling
@@ -998,13 +1008,12 @@ module starwars (
 	wire signed [18:0] avg_x_ext = $signed(avg_x);
 	wire signed [18:0] avg_y_ext = $signed(avg_y);
 	
-	wire is_1050p = (HDMI_HEIGHT >= 12'd1080 && HDMI_HEIGHT < 12'd1400);
-	wire is_700p  = (HDMI_HEIGHT >= 12'd720  && HDMI_HEIGHT < 12'd1080);
+	wire is_1080p = (HDMI_HEIGHT >= 12'd1080 && HDMI_HEIGHT < 12'd1400);
 	wire is_480p  = (HDMI_HEIGHT >= 12'd480  && HDMI_HEIGHT < 12'd720);
 	wire is_240p  = (HDMI_HEIGHT < 12'd480);
 
 	always @(*) begin
-		if (is_1050p) begin
+		if (is_1080p) begin
 			// ---------------------------------------------------------
 			// 1080p Mode
 			// ---------------------------------------------------------
@@ -1163,7 +1172,7 @@ module starwars (
 	wire [10:0] final_x = new_x[10:0];
 	wire [10:0] final_y = new_y[10:0];
 
-	wire beam_in_bounds = (new_x[11:0] < ((is_1050p) ? 12'd1470 : fb_width_tmp)) && (new_y[11:0] < fb_height_tmp);
+	wire beam_in_bounds = (new_x[11:0] < ((is_1080p) ? 12'd1470 : fb_width_tmp)) && (new_y[11:0] < fb_height_tmp);
 
 	// The VJFCWN (Face Window) macro draws the shield hit/flash effect.
 	// It draws massive lines out to X=+/-960 and Y=+/-1024.
@@ -1284,7 +1293,7 @@ module starwars (
 
 	reg ce_pix;
 	always @(*) begin
-		if (osd_120hz_mode || is_1050p) ce_pix = 1'b1;                    // /1 (107.14 MHz)
+		if (osd_120hz_mode || is_1080p) ce_pix = 1'b1;                    // /1 (107.14 MHz)
 		else if (is_240p)               ce_pix = (clk_div_cnt[2:0] == 0); // /8 (13.39 MHz)
 		else if (is_480p)               ce_pix = (clk_div_cnt[1:0] == 0); // /4 (26.78 MHz)
 		else                            ce_pix = clk_div_cnt[0];          // /2 (53.57 MHz) - Default for 720p / 1440p+

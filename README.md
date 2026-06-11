@@ -20,7 +20,7 @@ The original Star Wars arcade machine (Atari part number 136021) is built from t
 | **Vector Generator** | Atari Analog Vector Generator (AVG) with state machine PROM, 10-bit DACs, analog integrators | New cycle exact Digital AVG in `avg.vhd` based on schematics |
 | **Sound** | 4× Atari C012294 POKEY + TI TMS5220 speech synthesizer | POKEY in VHDL + TMS5220 with variable rate (TMS5220C mode) |
 | **Audio Filters** | TL084 quad op-amp low-pass filter + Reticon R5106 delay/reverb | Modeled in `audio_filter_tl084.sv` and `reticon_r5106.sv` |
-| **Display** | Amplifone XY color vector monitor (RGB analog) | Output Resolution adaptive DDRAM framebuffer, `vector_fb_ddram.sv`|
+| **Display** | Amplifone XY color vector monitor (RGB analog) | Output Resolution adaptive 32bpp DDRAM framebuffer, `vector_fb_ddram.sv`|
 | **Controls** | Custom flight yoke with analog potentiometers (2-axis) | Mapped to MiSTer analog stick inputs, with digital fallback |
 | **Non-volatile RAM** | 256 bytes battery-backed NOVRAM (high scores, settings) | Saved to MiSTer SD card via NVRAM system |
 
@@ -97,9 +97,11 @@ composite_sync=1 ; Try 1 = composite sync or 0 = seperate sync
 | **Aspect Ratio** | **Optimized** (recommended) auto-detects HDMI resolution and picks the cleanest scale factor.<br>**Pixel Perfect** forces 1:1 pixel mapping.<br>**Stretched** fills the screen. |
 | **Unbuffered Vectors** | When On, bypasses buffering and uses simple double-buffer ping-pong. Fakes a vector look, best used at 120Hz.|
 | **120Hz (720p only)** | Doubles the refresh rate to ~120Hz. Reduces Frame Pacing Latency and improves the look of Unbuffered Vectors. |
-| **Tone Mapping** | **Modern** (Recommended): Optimized for HDR displays. Even without HDR, it compresses the upper dynamic range less than legacy mode. This results in a slightly darker overall image but preserves intense highlights (e.g., hits on the red turrets in the tower sequence).<br>**Legacy**: The classic, older tone mapping style. |
+| **Tone Mapping** | Selectable Z-axis intensity scaling profiles: **Linear 1** (Default), **Linear 2**, **Bright** (HDR-style LUT), and **Off**. |
 | **CRT Dot Bloom** | Simulates the intense phosphor bloom of the original analog CRT when drawing single-pixel dots. Options include **Pixel**, **Double**, and **Ellipse**. Leave it on **Auto** to let the core automatically pick the best shape based on your resolution. |
 | **CRT Flash Hit** | Emulates the extreme overdriven off-screen drawn vectors that shine like a flash of light when your shields are hit or the Death Star explodes. |
+
+> **Tone Mapping Tip:** The default **Linear 1** mapping can appear a bit dark in 1080p modes because the rendered vector lines are extremely thin. For the ultimate arcade glow, turn on HDR in your `mister.ini` (`hdr=1`), crank up your TV/Monitor's OLED Light or Backlight as high as possible, and adjust Contrast and Brightness (being careful to avoid white crush). Finally, adjust your display's Black Level so it sits just one tick before the first step of background brightness becomes visible.
 
 ### Cabinet Audio Hardware
 
@@ -152,6 +154,8 @@ Quick reference for folders and file placement on your MiSTer SD card:
 /_Arcade/mame/esb.zip
 ```
 
+> **Note:** The core file can also simply be named `StarWars.rbf` (dropping the `Arcade-` prefix). The MiSTer framework will automatically find and load it using either name based on the updated MRA definitions.
+
 ---
 
 ## Known Limitations
@@ -160,9 +164,8 @@ This core renders vectors as 1-pixel-wide lines on a raster framebuffer. A real 
 
 | Area | Limitation | Detail |
 |---|---|---|
-| **Beam Velocity** | Not modeled | Perceived brightness is inversely proportional to beam velocity. This core draws all vectors at uniform brightness per Z-level regardless of length. |
 | **Phosphor Persistence** | Not modeled | The P22 phosphor used in color vector CRTs has a visible afterglow decay (~1–10 ms depending on color channel). Moving objects leave fading trails. |
-| **Beam Overlap** | Not modeled | Where two vectors cross or overlap on a real CRT, the phosphor is excited twice, producing additive brightness and enhanced bloom at the intersection. |
+| **Phosphor Blooming** | Not modeled | Blooming (light scattering around intensely bright objects) is not yet supported. |
 ---
 
 ## Compilation

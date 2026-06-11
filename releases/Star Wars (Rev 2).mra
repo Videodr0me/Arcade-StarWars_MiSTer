@@ -14,7 +14,7 @@
 	<setname>starwars</setname>
 	<parent>starwars</parent>
 	<mameversion>0218</mameversion>
-	<rbf>Arcade-StarWars</rbf>
+	<rbf>StarWars</rbf>
 	<about></about>
 
 	<resolution>31kHz</resolution>

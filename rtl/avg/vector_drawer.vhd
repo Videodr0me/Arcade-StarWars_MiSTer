@@ -10,7 +10,7 @@
 --   - The AM6012 DACs (schematic p.26) convert DVX/DVY into analog voltages.
 --   - LF13201 multiplying DACs apply linear_scale as a velocity multiplier.
 --   - Op-amp integrators accumulate the DAC voltages into beam position.
---   - The timer overflow generates STOP, ending the draw phase.--
+--   - The timer overflow generates STOP, ending the draw phase.
 --   - Normalization substates (matching hardware LS194 shift registers
 --     clocked at 12 MHz with PROM frozen via SA, schematic p.24 Fig.0).
 --   - VCTR uses 15-bit timer (0x8000 - hw_timer), SVEC uses 8-bit sub-timer (0x0100 - hw_timer[7:0]).

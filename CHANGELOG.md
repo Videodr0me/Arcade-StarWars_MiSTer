@@ -1,6 +1,19 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## Release [20260611]
+
+### Added
+- **CRT Additive Blending (Phosphor Bloom)**: Crossing vectors now mathematically accumulate their colors and intensities, perfectly simulating how real CRT phosphors pool light together. Intersecting lines and dense clusters now glow brightly like the real arcade cabinet!
+- **Extended Viewport**: Opened up the bottom boundary of the render window. You can now see much more of the X-Wing, Snowspeeder, and Millennium Falcon cockpit art at the bottom of the screen.
+- **ESB Hit Flashes**: The CRT extreme overdrive hit/flash effect is now fully supported and enabled for *Empire Strikes Back*.
+
+### Changed
+- **Tone Mapping Options**: Completely overhauled the Z-axis intensity tone mapping. Added 4 new selectable profiles in the OSD: Linear 1 (Default), Linear 2, Bright (HDR-style LUT), and Off.
+- **HD Render Resolutions**: Bumped the internal video targets to true 1080p and 720p formats for sharper scaling and timing alignment on modern displays.
+- **Subpixel Precision**: Rewrote the vector coordinate pipeline to support true subpixel offsets for Stars and Diagonals, eliminating displacement artifacts at HD resolutions.
+- **MRA Updates**: Changed the MRA files to drop the "arcade-" prefix when requesting the `.rbf` core file.
+
 ## Release [20260607]
 
 ### Added
